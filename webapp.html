@@ -874,6 +874,7 @@
     container.innerHTML =
       '<div class="chipsrow">' +
         [50,100,250,500].map(function(v){ return '<button class="chipbtn" data-v="'+v+'">'+v+'</button>'; }).join('') +
+        '<button class="chipbtn allin" data-allin="1">\u0423\u0441\u0435</button>' +
       '</div>' +
       '<div class="betrow">' +
         '<button class="stepbtn" data-d="-1">\u2212</button>' +
@@ -884,12 +885,15 @@
 
     var amtEl = container.querySelector('#amtDisplay');
     var playBtn = container.querySelector('#playBtn');
-    var chipBtns = container.querySelectorAll('.chipbtn');
+    var chipBtns = container.querySelectorAll('.chipbtn[data-v]');
+    var allinBtn = container.querySelector('.allin');
 
+    function maxBet(){ return Math.max(MIN_BET, Math.min(MAX_BET, balance)); }
     function clamp(v){ return Math.max(MIN_BET, Math.min(MAX_BET, Math.min(v, Math.max(balance,MIN_BET)))); }
     function render(){
       amtEl.textContent = amount;
       chipBtns.forEach(function(b){ b.classList.toggle('sel', parseInt(b.dataset.v,10) === amount); });
+      allinBtn.classList.toggle('sel', amount === maxBet());
     }
     container.querySelectorAll('.stepbtn').forEach(function(b){
       b.addEventListener('click', function(){
@@ -901,6 +905,7 @@
     chipBtns.forEach(function(b){
       b.addEventListener('click', function(){ amount = clamp(parseInt(b.dataset.v,10)); render(); haptic(); });
     });
+    allinBtn.addEventListener('click', function(){ amount = maxBet(); render(); haptic(); });
     playBtn.onclick = function(){ onPlay(amount); };
     render();
 
