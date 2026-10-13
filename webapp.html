@@ -549,6 +549,18 @@
           </div>
         </div>
 
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>💸 Переказ гравцю</h4>
+          <p id="transferHint">Вкажи @username або ID і суму</p>
+          <div class="promorow" style="margin-bottom:8px">
+            <input id="transferTarget" placeholder="@username або ID" autocomplete="off">
+          </div>
+          <div class="promorow">
+            <input id="transferAmount" placeholder="Сума" inputmode="numeric" autocomplete="off">
+            <button id="transferBtn">Переказати</button>
+          </div>
+        </div>
+
         <button class="playbtn" id="backToBot">Повернутись у чат</button>
       </div>
     </section>
@@ -576,7 +588,7 @@
   var API_BASE = (location.protocol === 'http:' || location.protocol === 'https:')
     ? location.origin
     : "https://neon-casino-bot-t5ug.onrender.com";
-  var MIN_BET = 10, MAX_BET = 50000;
+  var MIN_BET = 10, MAX_BET = Infinity; // реальна стеля — лише твій баланс
 
   var tg = window.Telegram && window.Telegram.WebApp;
   if (tg){ tg.ready(); tg.expand(); }
@@ -670,7 +682,7 @@
       var r = await api('/api/me', {});
       meData = r;
       setBalance(r.balance);
-      if (r.min_bet) MIN_BET=r.min_bet; if (r.max_bet) MAX_BET=r.max_bet;
+      if (r.min_bet) MIN_BET=r.min_bet;
       updateBonusUI();
       updateProfileHead();
     }
@@ -846,6 +858,34 @@
     promoBtn.disabled = false;
   });
 
+  var transferTarget = document.getElementById('transferTarget');
+  var transferAmount = document.getElementById('transferAmount');
+  var transferBtn = document.getElementById('transferBtn');
+  var transferHint = document.getElementById('transferHint');
+  transferBtn.addEventListener('click', async function(){
+    var target = (transferTarget.value||'').trim();
+    var amount = parseInt(transferAmount.value, 10);
+    if (!target){ transferHint.textContent = 'Вкажи отримувача'; return; }
+    if (!amount || amount <= 0){ transferHint.textContent = 'Вкажи суму'; return; }
+    if (!liveMode){ transferHint.textContent = 'Доступно лише через бота'; haptic('fail'); return; }
+    if (amount > balance){ transferHint.textContent = 'Недостатньо монет'; haptic('fail'); return; }
+    transferBtn.disabled = true;
+    try {
+      var r = await api('/api/transfer', {target: target, amount: amount});
+      setBalance(r.balance);
+      transferHint.textContent = 'Переказано '+r.amount+' монет гравцю '+r.target_name;
+      transferTarget.value = ''; transferAmount.value = '';
+      haptic('ok');
+    } catch(e){
+      transferHint.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет'
+        : e.error==='not_found' ? 'Гравця не знайдено'
+        : e.error==='self' ? 'Не можна переказати собі'
+        : 'Не вдалось переказати';
+      haptic('fail');
+    }
+    transferBtn.disabled = false;
+  });
+
   var homeLb = document.getElementById('homeLeaderboard');
   async function refreshLeaderboard(){
     if (!liveMode){ homeLb.innerHTML = '<div class="msg">Доступно лише через бота</div>'; return; }
@@ -888,8 +928,8 @@
     var chipBtns = container.querySelectorAll('.chipbtn[data-v]');
     var allinBtn = container.querySelector('.allin');
 
-    function maxBet(){ return Math.max(MIN_BET, Math.min(MAX_BET, balance)); }
-    function clamp(v){ return Math.max(MIN_BET, Math.min(MAX_BET, Math.min(v, Math.max(balance,MIN_BET)))); }
+    function maxBet(){ return Math.max(MIN_BET, balance); }
+    function clamp(v){ return Math.max(MIN_BET, Math.min(v, Math.max(balance,MIN_BET))); }
     function render(){
       amtEl.textContent = amount;
       chipBtns.forEach(function(b){ b.classList.toggle('sel', parseInt(b.dataset.v,10) === amount); });
