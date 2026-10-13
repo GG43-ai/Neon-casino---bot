@@ -567,8 +567,15 @@
 (function(){
   "use strict";
 
-  // ЗАМІНІТЬ на адресу свого бота на Render
-  var API_BASE = "https://your-bot.onrender.com";
+  // Сторінку завжди роздає той самий сервіс, що й API (main.py віддає
+  // webapp.html на /app), тому за замовчуванням б'ємо в той самий origin —
+  // жодних змінних середовища чи ручних правок не треба, навіть якщо потім
+  // зміниться назва сервісу на Render чи підключиться свій домен. Рядок
+  // нижче лишається лише як запасний варіант для локального відкриття
+  // файла напряму (file://), коли origin визначити нема з чого.
+  var API_BASE = (location.protocol === 'http:' || location.protocol === 'https:')
+    ? location.origin
+    : "https://neon-casino-bot-t5ug.onrender.com";
   var MIN_BET = 10, MAX_BET = 50000;
 
   var tg = window.Telegram && window.Telegram.WebApp;
