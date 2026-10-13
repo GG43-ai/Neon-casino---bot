@@ -205,13 +205,19 @@ web_crash_games = {}
 WEB_GAME_LOCK = threading.Lock()
 
 MIN_BET = int(os.getenv("MINI_APP_MIN_BET", "10"))
-MAX_BET = int(os.getenv("MINI_APP_MAX_BET", "50000"))
+# Бизнес-лимита на максимальную ставку больше нет — "Усе" должно реально
+# ставить весь баланс, сколько бы там ни было. Верхняя граница ниже — не
+# лимит на игру, а защита от абсурдных/переполненных значений из
+# подделанного запроса; реальный потолок всё равно — баланс игрока,
+# это гарантирует атомарный spend() (he ушедший ниже нуля UPDATE).
+MAX_BET = int(os.getenv("MINI_APP_MAX_BET", "100000000"))
 
 
 def _parse_amount(body):
     """Игрок сам выбирает ставку — проверяем, что это вменяемое целое
     число, а не отрицательное/дробное/огромное значение из подделанного
-    запроса."""
+    запроса. Верхней бизнес-границы нет: если ставка больше реального
+    баланса, её всё равно отклонит атомарный spend()."""
     amount = body.get("amount")
     if not isinstance(amount, int) or isinstance(amount, bool):
         return None
@@ -352,6 +358,51 @@ def api_referral():
         bot_username = None
     link = f"https://t.me/{bot_username}?start=ref_{uid}" if bot_username else None
     return {"referrals_count": db_user[5] or 0, "link": link, "reward_per_invite": 100}
+
+
+@app.route("/api/transfer", methods=["POST"])
+def api_transfer():
+    """Переказ монет іншому гравцю з Mini App — та сама логіка, що й
+    команда /pay в чаті бота (пошук за @username або id, анти-фрод лічильник,
+    атомарні spend()/add_balance())."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    body = request.get_json(silent=True) or {}
+    target_input = str(body.get("target", "")).strip()
+    amount = body.get("amount")
+    if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+        return {"error": "bad_amount"}, 400
+    if not target_input:
+        return {"error": "bad_target"}, 400
+
+    call_async(get_user(uid, username))
+    target_db = call_async(get_by_identifier(target_input))
+    if not target_db:
+        return {"error": "not_found"}, 404
+    if target_db[0] == uid:
+        return {"error": "self"}, 400
+
+    fraud_alert = check_transfer_fraud(uid, username or str(uid))
+    if fraud_alert and BOT_APP:
+        call_async(notify_admin_fraud(BOT_APP, fraud_alert))
+
+    if not call_async(spend(uid, amount)):
+        return {"error": "insufficient_funds"}, 400
+    call_async(add_balance(target_db[0], amount))
+
+    try:
+        sender_name = f"@{username}" if username else str(uid)
+        call_async(BOT_APP.bot.send_message(
+            target_db[0], f"💸 Гравець {sender_name} переказав вам {amount} 💰!"
+        ))
+    except Exception:
+        pass
+
+    balance = call_async(get_user(uid))[2]
+    target_name = target_db[1] or str(target_db[0])
+    return {"balance": balance, "target_name": target_name, "amount": amount}
 
 
 @app.route("/api/mines/bet", methods=["POST"])
