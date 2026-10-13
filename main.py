@@ -14,6 +14,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LabeledPrice,
+    MenuButtonWebApp,
     Update,
     WebAppInfo,
 )
@@ -922,7 +923,7 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "change-me-in-render-env")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 # Ссылка на Mini App (опубликованную HTML-страницу). Пока не задано —
-# кнопка "Открыть казино" просто не показывается в меню.
+# нативная кнопка меню рядом с полем ввода не выставляется вообще.
 MINI_APP_URL = os.getenv("MINI_APP_URL", "")
 CARD_NUMBER = "XXXX-XXXX-XXXX-XXXX"  # Укажите номер вашей карты
 
@@ -1151,14 +1152,10 @@ def track_game_win(user_id, username, is_win):
 
 # ---------- MENUS ----------
 def menu(is_admin=False):
-    kb = []
-    if MINI_APP_URL:
-        kb.append([
-            InlineKeyboardButton(
-                "🎰 Открыть казино", web_app=WebAppInfo(url=MINI_APP_URL)
-            )
-        ])
-    kb += [
+    # Кнопка входу в Mini App тепер лише внизу біля поля вводу (нативна
+    # кнопка меню Telegram, виставляється через BotFather/set_chat_menu_button),
+    # тому дублювати її інлайн-кнопкою в головному меню більше не треба.
+    kb = [
         [
             InlineKeyboardButton("🎮 Игры", callback_data="games"),
             InlineKeyboardButton("🏆 Топ", callback_data="top"),
@@ -2523,6 +2520,19 @@ async def _post_init(application):
     за игры, которые остались висеть с прошлого запуска."""
     await recover_orphaned_games(application.bot)
     asyncio.create_task(_keep_db_warm())
+
+    # Нативна кнопка біля поля вводу (не інлайн-кнопка в меню) — виставляємо
+    # її самі при кожному старті, щоб не покладатись на ручне налаштування
+    # через BotFather і щоб вона завжди вела на актуальний MINI_APP_URL.
+    if MINI_APP_URL:
+        try:
+            await application.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="🎰 Казино", web_app=WebAppInfo(url=MINI_APP_URL)
+                )
+            )
+        except Exception:
+            logger.exception("Не удалось выставить кнопку меню Mini App")
 
 
 async def _keep_db_warm():
