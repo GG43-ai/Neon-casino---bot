@@ -190,11 +190,17 @@
   .pin-gfx.down{transform:rotate(100deg) translateY(8px);opacity:.2}
 
   /* SLOTS */
-  .slots{display:flex;gap:8px;justify-content:center;margin-bottom:14px;background:var(--panel);border-radius:16px;padding:16px}
-  .reel{width:64px;height:76px;border-radius:10px;background:var(--bg2);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-weight:800;font-size:1.3rem;border:1px solid rgba(255,255,255,.08)}
-  .reel.spin .sym{animation:reelspin .18s linear infinite}
-  @keyframes reelspin{0%{transform:translateY(0)}100%{transform:translateY(-14px)}}
-  .sym.won{color:var(--gold)}
+  .slots{display:flex;gap:8px;justify-content:center;margin-bottom:14px;background:var(--panel);border-radius:16px;padding:16px;perspective:300px}
+  .reel{width:64px;height:76px;border-radius:10px;background:var(--bg2);overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 10px 14px -8px rgba(0,0,0,.6),inset 0 -10px 14px -8px rgba(0,0,0,.6)}
+  .reel .stripwrap{display:flex;flex-direction:column;align-items:center}
+  .sym{display:flex;align-items:center;justify-content:center;width:64px;height:76px;flex:0 0 76px;font-family:'Unbounded',sans-serif;font-weight:800;font-size:1.5rem}
+  .sym.seven{color:var(--gold);text-shadow:0 0 12px rgba(255,195,66,.85)}
+  .reel.spin .stripwrap{animation:reelspin .32s linear infinite}
+  @keyframes reelspin{from{transform:translateY(0)}to{transform:translateY(-76px)}}
+  .stripwrap.land{animation:reelland .4s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes reelland{0%{transform:translateY(-14px)}55%{transform:translateY(6px)}100%{transform:translateY(0)}}
+  .sym.won{animation:symwin .5s ease infinite alternate}
+  @keyframes symwin{from{transform:scale(1)}to{transform:scale(1.18)}}
 
   .profhead{display:flex;flex-direction:column;align-items:center;padding-top:6px;margin-bottom:6px}
   .avatar{width:76px;height:76px;border-radius:50%;background:linear-gradient(145deg,var(--pink),var(--cyan));display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 3px rgba(255,255,255,.08),0 0 24px rgba(255,45,120,.3);margin-bottom:10px}
@@ -984,7 +990,8 @@
       if (flying) return;
       if (!liveMode && balance < amount){ crashMsg.textContent='Недостатньо монет'; return; }
       if (liveMode){
-        try { await api('/api/crash/bet', {amount: amount}); } catch(e){ crashMsg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Активна гра вже є'; return; }
+        try { var rb = await api('/api/crash/bet', {amount: amount}); setBalance(rb.balance); }
+        catch(e){ crashMsg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Активна гра вже є'; return; }
       } else { setBalance(balance - amount); localPoint = demoPoint(); }
 
       flying = true; mult = 1; resetLine();
@@ -995,6 +1002,7 @@
       haptic();
 
       var t0 = Date.now();
+      var tick = 0, checking = false;
       timer = setInterval(function(){
         var el = (Date.now()-t0)/1000;
         mult = Math.round((1+el*0.22)*100)/100;
@@ -1003,11 +1011,22 @@
         pts.push([x,y]);
         line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
         dot.setAttribute('cx',x); dot.setAttribute('cy',y);
-        if (!liveMode && mult >= localPoint) crash(localPoint);
+        if (!liveMode && mult >= localPoint){ crash(localPoint); return; }
+        // Опитуємо сервер раз на ~300мс, щоб вибух показувався одразу, поки
+        // гра ще триває, а не лише в момент натискання "Забрати".
+        tick++;
+        if (liveMode && !checking && tick % 3 === 0){
+          checking = true;
+          api('/api/crash/status', {}).then(function(r){
+            checking = false;
+            if (r.crashed){ crash(r.crash_point); }
+          }).catch(function(){ checking = false; });
+        }
       }, 100);
     }
 
     function crash(point){
+      if (!flying) return;
       clearInterval(timer); flying=false;
       crashMultEl.className='crash-mult boom';
       crashMsg.textContent='Вибух на x'+point.toFixed(2)+' — ставку втрачено';
@@ -1061,7 +1080,7 @@
 
     async function startMines(amount){
       if (!liveMode && balance < amount) return;
-      if (liveMode){ try { await api('/api/mines/bet', {amount:amount}); } catch(e){ return; } }
+      if (liveMode){ try { var rb = await api('/api/mines/bet', {amount:amount}); setBalance(rb.balance); } catch(e){ return; } }
       else setBalance(balance - amount);
       currentBet = amount;
       build(); cells.forEach(function(c){ c.el.disabled=false; });
@@ -1186,21 +1205,22 @@
       spinning = true; bar.setPlaying(true,'Крутиться...'); resultPill.classList.remove('show');
       msg.textContent = 'Крутиться...';
 
-      var number, color, reward, partage=false;
+      var number, color, reward, partage=false, newBalance;
       try {
         var mode = numChoice !== null ? 'number' : 'color';
         var r = await api('/api/roulette/play', {amount:amount, mode:mode, choice:choice, variant:'french'});
-        number=r.number; color=r.color; reward=r.reward; partage=r.partage;
+        number=r.number; color=r.color; reward=r.reward; partage=r.partage; newBalance=r.balance;
       } catch(e){
         spinning=false; bar.setPlaying(false,'Крутити');
         msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка';
         return;
       }
+      setBalance(newBalance - (reward||0)); // одразу видно списану ставку, поки крутиться
 
       spinTo(number);
       setTimeout(function(){
         spinning = false; bar.setPlaying(false,'Крутити');
-        if (reward) setBalance(balance + reward);
+        setBalance(newBalance); // підсумковий баланс — завжди з сервера, синхронно з ботом
         resultSw.style.background = color==='red'?'var(--red)':color==='black'?'#555':'var(--green)';
         resultText.textContent = number+' · '+colorName(color);
         resultPill.classList.add('show');
@@ -1235,10 +1255,11 @@
       flipping = true; bar.setPlaying(true,'У повітрі...');
       msg.textContent = 'У повітрі...';
 
-      var outcome, won, reward;
+      var outcome, won, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/coinflip/play', {amount:amount, choice:picked}); outcome=r.outcome; won=r.won; reward=r.reward; }
+        try { var r = await api('/api/coinflip/play', {amount:amount, choice:picked}); outcome=r.outcome; won=r.won; reward=r.reward; newBalance=r.balance; }
         catch(e){ flipping=false; bar.setPlaying(false,'Підкинути'); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward); // стейк списано одразу, поки монетка в повітрі
       } else {
         outcome = Math.random()<0.5 ? 'heads':'tails';
         won = outcome===picked; reward = won ? Math.floor(amount*1.9) : 0;
@@ -1249,7 +1270,8 @@
       coin.style.transform = 'rotateY('+(spins*360 + (outcome==='heads'?0:180))+'deg)';
       setTimeout(function(){
         flipping=false; bar.setPlaying(false,'Підкинути');
-        if (won) setBalance(balance+reward);
+        if (liveMode) setBalance(newBalance);
+        else if (won) setBalance(balance+reward);
         msg.textContent = (outcome==='heads'?'Орел':'Решка') + (won ? ' \u00b7 +'+reward+' монет' : ' — не вгадав');
         haptic(won?'ok':'fail');
       }, 1650);
@@ -1314,10 +1336,11 @@
       if (!liveMode && balance < amount){ msg.textContent='Недостатньо монет'; return; }
       playing = true; bar.setPlaying(true,'У польоті...'); msg.textContent='Кидок...';
 
-      var isIn, won, reward;
+      var isIn, won, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/basket/play', {amount:amount, choice:picked}); isIn=r.is_in; won=r.won; reward=r.reward; }
+        try { var r = await api('/api/basket/play', {amount:amount, choice:picked}); isIn=r.is_in; won=r.won; reward=r.reward; newBalance=r.balance; }
         catch(e){ playing=false; bar.setPlaying(false,'Кинути'); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward);
       } else {
         isIn = Math.random() < 0.4;
         won = (picked==='in'&&isIn) || (picked==='miss'&&!isIn);
@@ -1328,7 +1351,8 @@
       await flyToTarget(stage, emoji, hoop, isIn, 1000);
       stage.classList.add(isIn ? 'win' : 'lose');
       playing=false; bar.setPlaying(false,'Кинути');
-      if (won) setBalance(balance+reward);
+      if (liveMode) setBalance(newBalance);
+      else if (won) setBalance(balance+reward);
       msg.textContent = (isIn?'Влучив у кільце':'Промах') + (won ? ' \u00b7 +'+reward+' монет' : ' — не вгадав');
       haptic(won?'ok':'fail');
     }
@@ -1348,10 +1372,11 @@
       if (!liveMode && balance < amount){ msg.textContent='Недостатньо монет'; return; }
       playing = true; bar.setPlaying(true,'Летить...'); msg.textContent='Удар...';
 
-      var won, reward;
+      var won, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/football/play', {amount:amount}); won=r.won; reward=r.reward; }
+        try { var r = await api('/api/football/play', {amount:amount}); won=r.won; reward=r.reward; newBalance=r.balance; }
         catch(e){ playing=false; bar.setPlaying(false,'Бити'); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward);
       } else {
         won = Math.random() < 0.6; reward = won ? amount*2 : 0;
         setBalance(balance-amount);
@@ -1360,7 +1385,8 @@
       await flyToTarget(stage, emoji, goal, won, 1000);
       stage.classList.add(won ? 'win' : 'lose');
       playing=false; bar.setPlaying(false,'Бити');
-      if (won) setBalance(balance+reward);
+      if (liveMode) setBalance(newBalance);
+      else if (won) setBalance(balance+reward);
       msg.textContent = (won?'ГОЛ!':'Воротар врятував') + (won ? ' \u00b7 +'+reward+' монет' : '');
       haptic(won?'ok':'fail');
     }
@@ -1378,10 +1404,11 @@
       if (!liveMode && balance < amount){ msg.textContent='Недостатньо монет'; return; }
       playing = true; bar.setPlaying(true,'Летить...'); msg.textContent='Кидок...'; mark.classList.remove('show');
 
-      var value, reward;
+      var value, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/darts/play', {amount:amount}); value=r.value; reward=r.reward; }
+        try { var r = await api('/api/darts/play', {amount:amount}); value=r.value; reward=r.reward; newBalance=r.balance; }
         catch(e){ playing=false; bar.setPlaying(false,'Кинути'); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward);
       } else {
         value = 1+Math.floor(Math.random()*6);
         var coef = value===6?3:(value>=4?1.5:0);
@@ -1397,7 +1424,8 @@
 
       await new Promise(function(r){ setTimeout(r, 650); });
       playing=false; bar.setPlaying(false,'Кинути');
-      if (reward) setBalance(balance+reward);
+      if (liveMode) setBalance(newBalance);
+      else if (reward) setBalance(balance+reward);
       msg.textContent = (value===6?'Яблучко!':value>=4?'Близько!':'Повз ціль') + (reward ? ' \u00b7 +'+reward+' монет' : ' — без виграшу');
       haptic(reward?'ok':'fail');
     }
@@ -1419,10 +1447,11 @@
       pins.forEach(function(p){ p.classList.remove('down'); });
       var anim = playToss(stage, emoji, 1100);
 
-      var value, reward;
+      var value, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/bowling/play', {amount:amount}); value=r.value; reward=r.reward; }
+        try { var r = await api('/api/bowling/play', {amount:amount}); value=r.value; reward=r.reward; newBalance=r.balance; }
         catch(e){ playing=false; bar.setPlaying(false,'Кинути'); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward);
       } else {
         value = 1+Math.floor(Math.random()*6);
         var coef = value===6?3:(value>=3?1.5:0);
@@ -1436,7 +1465,8 @@
       await anim;
       settleResult(stage, emoji, reward>0);
       playing=false; bar.setPlaying(false,'Кинути');
-      if (reward) setBalance(balance+reward);
+      if (liveMode) setBalance(newBalance);
+      else if (reward) setBalance(balance+reward);
       msg.textContent = (value===6?'Страйк!':value>=3?'Частковий збив':'Повз') + (reward ? ' \u00b7 +'+reward+' монет' : ' — без виграшу');
       haptic(reward?'ok':'fail');
     }
