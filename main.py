@@ -427,7 +427,8 @@ def api_mines_bet():
         web_mines_games[uid] = {"grid": grid, "opened": [False] * 25, "mult": 1.0, "bet": amount}
         call_async(track_active_game(uid, "mines_webapp", uid, amount))
 
-    return {"bet": amount, "mult": 1.0}
+    balance = call_async(get_user(uid))[2]
+    return {"bet": amount, "mult": 1.0, "balance": balance}
 
 
 @app.route("/api/mines/open", methods=["POST"])
@@ -496,7 +497,33 @@ def api_crash_bet():
         web_crash_games[uid] = {"start": time.time(), "crash_point": crash_point, "bet": amount}
         call_async(track_active_game(uid, "crash_webapp", uid, amount))
 
-    return {"bet": amount}
+    balance = call_async(get_user(uid))[2]
+    return {"bet": amount, "balance": balance}
+
+
+@app.route("/api/crash/status", methods=["POST"])
+def api_crash_status():
+    """Фронтенд опитує це під час польоту, щоб вибух показувався одразу,
+    поки гра ще триває, а не лише в момент натискання "Забрати"."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, _ = auth
+
+    with WEB_GAME_LOCK:
+        game = web_crash_games.get(uid)
+        if not game:
+            return {"error": "no_game"}, 409
+
+        elapsed = time.time() - game["start"]
+        current_mult = _crash_mult_at(elapsed)
+        if current_mult >= game["crash_point"]:
+            web_crash_games.pop(uid, None)
+            call_async(clear_active_game(uid))
+            balance = call_async(get_user(uid))[2]
+            return {"crashed": True, "crash_point": game["crash_point"], "balance": balance}
+
+    return {"crashed": False, "mult": current_mult}
 
 
 @app.route("/api/crash/cashout", methods=["POST"])
@@ -718,7 +745,7 @@ def api_slots_play():
         call_async(add_balance(uid, reward))
     balance = call_async(get_user(uid))[2]
 
-    pool = ["7\u20e3", "\U0001F514", "\U0001F347", "\U0001F34B"]  # 7️⃣ 🔔 🍇 🍋
+    pool = ["7", "🔔", "🍇", "🍋"]  # 7 🔔 🍇 🍋 (plain 7, not keycap, avoids the "70" render bug)
     if value == 64:
         reel = [pool[0], pool[0], pool[0]]
     elif value in (1, 22, 43):
