@@ -229,6 +229,28 @@
   .promorow{display:flex;gap:8px}
   .promorow input{flex:1;min-width:0;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:10px 12px;color:var(--text);font-size:.8rem;text-transform:uppercase}
   .promorow button{padding:0 16px;border-radius:11px;background:var(--green);color:#052013;font-weight:700;font-size:.76rem;font-family:'Unbounded',sans-serif}
+
+  /* SETTINGS TOGGLES */
+  .setrow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.8rem}
+  .setrow:last-child{border-bottom:none}
+  .toggle{width:44px;height:26px;border-radius:999px;background:var(--bg2);border:1px solid rgba(255,255,255,.12);position:relative;flex:none}
+  .toggle i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s}
+  .toggle[data-on="1"]{background:rgba(43,255,163,.25);border-color:var(--green)}
+  .toggle[data-on="1"] i{transform:translateX(18px);background:var(--green)}
+
+  /* ADMIN PANEL */
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+  .statcard{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;text-align:center}
+  .statcard b{display:block;font-family:'Unbounded',sans-serif;font-size:1.2rem;color:var(--gold)}
+  .statcard span{font-size:.64rem;color:var(--dim)}
+  .adminlist{display:flex;flex-direction:column;gap:6px;margin-bottom:4px;max-height:220px;overflow-y:auto}
+  .adminrow{display:flex;justify-content:space-between;align-items:center;background:var(--bg2);border-radius:10px;padding:8px 10px;font-size:.72rem}
+  .adminrow b{color:var(--gold);font-family:'Unbounded',sans-serif}
+  .adminmode{display:flex;gap:8px;margin-bottom:8px}
+  .adminmode button{flex:1;padding:9px;border-radius:10px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);font-size:.74rem;font-weight:700}
+  .adminmode button.sel{border-color:var(--green);color:var(--green)}
+  .adminmode button.sel[data-mode="sub"]{border-color:var(--red);color:var(--red)}
+  textarea.broadcastinput{width:100%;min-height:80px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:10px 12px;color:var(--text);font-size:.8rem;font-family:inherit;margin-bottom:8px;resize:vertical}
   .quickgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
   .quickbtn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 2px;border-radius:14px;background:var(--panel);border:1px solid rgba(255,255,255,.06)}
   .quickbtn:active{transform:scale(.95)}
@@ -515,9 +537,9 @@
         <h2 class="gametitle">Слоти</h2>
         <p class="gamesub">Три сімки — x5, три однакових — x3</p>
         <div class="slots">
-          <div class="reel" id="reel0"><span class="sym">7⃣</span></div>
-          <div class="reel" id="reel1"><span class="sym">7⃣</span></div>
-          <div class="reel" id="reel2"><span class="sym">7⃣</span></div>
+          <div class="reel" id="reel0"><div class="stripwrap"><span class="sym seven">7</span></div></div>
+          <div class="reel" id="reel1"><div class="stripwrap"><span class="sym seven">7</span></div></div>
+          <div class="reel" id="reel2"><div class="stripwrap"><span class="sym seven">7</span></div></div>
         </div>
         <div class="msg" id="slotsMsg">Обери ставку й крути</div>
       </div>
@@ -567,7 +589,66 @@
           </div>
         </div>
 
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>⚙️ Налаштування</h4>
+          <div class="setrow"><span>🔊 Звук</span><button class="toggle" id="toggleSound" data-on="1"><i></i></button></div>
+          <div class="setrow"><span>📳 Вібрація</span><button class="toggle" id="toggleVibro" data-on="1"><i></i></button></div>
+        </div>
+
+        <div class="hcard" id="adminCard" style="margin-bottom:18px;display:none">
+          <h4>👑 Адмін-панель</h4>
+          <p>Статистика, баланс гравців, розсилка</p>
+          <button class="hbtn" id="openAdminBtn" data-goto="admin">Відкрити</button>
+        </div>
+
         <button class="playbtn" id="backToBot">Повернутись у чат</button>
+      </div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="page" data-page="admin">
+      <div class="pagebody">
+        <h2 class="gametitle">👑 Адмін-панель</h2>
+        <p class="gamesub">Лише для адміністратора</p>
+
+        <div class="statgrid">
+          <div class="statcard"><b id="admUsers">—</b><span>гравців</span></div>
+          <div class="statcard"><b id="admTotalBal">—</b><span>монет у системі</span></div>
+        </div>
+
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>💰 Баланс гравця</h4>
+          <p>Вкажи @username або ID</p>
+          <div class="adminmode">
+            <button class="sel" data-mode="add">➕ Видати</button>
+            <button data-mode="sub">➖ Забрати</button>
+          </div>
+          <div class="promorow" style="margin-bottom:8px">
+            <input id="admTarget" placeholder="@username або ID" autocomplete="off">
+          </div>
+          <div class="promorow">
+            <input id="admAmount" placeholder="Сума" inputmode="numeric" autocomplete="off">
+            <button id="admBalanceBtn">Застосувати</button>
+          </div>
+          <p id="admBalanceHint" style="margin-top:8px;margin-bottom:0"></p>
+        </div>
+
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>📢 Розсилка всім гравцям</h4>
+          <textarea class="broadcastinput" id="admBroadcastText" placeholder="Текст повідомлення..."></textarea>
+          <button class="hbtn" id="admBroadcastBtn">Надіслати всім</button>
+          <p id="admBroadcastHint" style="margin-top:8px;margin-bottom:0"></p>
+        </div>
+
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>🏆 Топ балансів</h4>
+          <div class="adminlist" id="admTopList"><p style="color:var(--dim);font-size:.72rem">Завантаження...</p></div>
+        </div>
+
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>🚨 Підозрілі гравці</h4>
+          <div class="adminlist" id="admSuspiciousList"><p style="color:var(--dim);font-size:.72rem">Підозрілої активності немає</p></div>
+        </div>
       </div>
     </section>
 
@@ -609,9 +690,40 @@
   function hideGate(){ gate.style.display='none'; appEl.style.display=''; }
   if (!liveMode) showGate(); else hideGate();
 
+  /* ---------------- НАЛАШТУВАННЯ (звук/вібрація) ---------------- */
+  // Суто зручність для цього пристрою/браузера — свідомо лежить у
+  // localStorage, а не на сервері: нема сенсу синхронізувати між пристроями.
+  var settings = {sound:true, vibro:true};
+  try {
+    var saved = JSON.parse(localStorage.getItem('neon_settings') || '{}');
+    if (typeof saved.sound === 'boolean') settings.sound = saved.sound;
+    if (typeof saved.vibro === 'boolean') settings.vibro = saved.vibro;
+  } catch(e){}
+  function saveSettings(){ try{ localStorage.setItem('neon_settings', JSON.stringify(settings)); }catch(e){} }
+
+  var audioCtx = null;
+  function playTone(type){
+    if (!settings.sound) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      var t = audioCtx.currentTime;
+      if (type === 'ok'){ o.type='triangle'; o.frequency.setValueAtTime(520,t); o.frequency.exponentialRampToValueAtTime(900,t+.14); }
+      else if (type === 'fail'){ o.type='sawtooth'; o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(90,t+.22); }
+      else { o.type='sine'; o.frequency.setValueAtTime(380,t); }
+      g.gain.setValueAtTime(.001,t);
+      g.gain.exponentialRampToValueAtTime(.12, t+.01);
+      g.gain.exponentialRampToValueAtTime(.001, t+(type==='fail'?.24:type==='ok'?.16:.08));
+      o.start(t); o.stop(t+.3);
+    } catch(e){}
+  }
+
   function haptic(type){
     if (type === 'ok') burstConfetti();
-    if (!tg || !tg.HapticFeedback) return;
+    playTone(type);
+    if (!settings.vibro || !tg || !tg.HapticFeedback) return;
     if (type === 'ok') tg.HapticFeedback.notificationOccurred('success');
     else if (type === 'fail') tg.HapticFeedback.notificationOccurred('error');
     else tg.HapticFeedback.impactOccurred('light');
@@ -695,6 +807,7 @@
     catch(e){}
   }
   refreshBalance();
+  checkAdmin();
 
   function updateProfileHead(){
     var nameEl = document.getElementById('profName');
@@ -741,7 +854,7 @@
             gateLoginBtn.disabled = false; gateSpinner.classList.remove('show');
             setBalance(pd.balance);
             haptic('ok');
-            refreshBalance(); refreshLeaderboard();
+            refreshBalance(); refreshLeaderboard(); checkAdmin();
           } else if (pd.status === 'expired'){
             clearInterval(loginPollTimer); loginPollTimer = null;
             gateStatusText.textContent = 'Посилання застаріло — спробуй ще раз';
@@ -760,8 +873,8 @@
   var navbtns = document.querySelectorAll('.navbtn');
   var titleEl = document.getElementById('pageTitle');
   var backBtn = document.getElementById('backBtn');
-  var titles = {home:'NEON CASINO',games:'Ігри',crash:'Краш',mines:'Міни',roulette:'Рулетка',coinflip:'Монетка',basket:'Баскетбол',football:'Футбол',darts:'Дартс',bowling:'Боулінг',slots:'Слоти',profile:'Профіль'};
-  var navMap = {home:'home',games:'games',crash:'games',mines:'games',roulette:'games',coinflip:'games',basket:'games',football:'games',darts:'games',bowling:'games',slots:'games',profile:'profile'};
+  var titles = {home:'NEON CASINO',games:'Ігри',crash:'Краш',mines:'Міни',roulette:'Рулетка',coinflip:'Монетка',basket:'Баскетбол',football:'Футбол',darts:'Дартс',bowling:'Боулінг',slots:'Слоти',profile:'Профіль',admin:'Адмін-панель'};
+  var navMap = {home:'home',games:'games',crash:'games',mines:'games',roulette:'games',coinflip:'games',basket:'games',football:'games',darts:'games',bowling:'games',slots:'games',profile:'profile',admin:'profile'};
 
   function goto(name){
     pages.forEach(function(p){ p.classList.toggle('active', p.dataset.page === name); });
@@ -769,6 +882,7 @@
     titleEl.textContent = titles[name] || 'NEON CASINO';
     backBtn.classList.toggle('show', name !== 'home' && name !== 'games' && name !== 'profile');
     refreshBalance(); // підтягуємо актуальний баланс із Neon при кожному переході
+    if (name === 'admin') loadAdminData();
     haptic();
   }
   document.querySelectorAll('[data-goto]').forEach(function(el){
@@ -892,6 +1006,102 @@
     transferBtn.disabled = false;
   });
 
+  /* ---------------- ПЕРЕМИКАЧІ ЗВУК/ВІБРАЦІЯ ---------------- */
+  var toggleSound = document.getElementById('toggleSound');
+  var toggleVibro = document.getElementById('toggleVibro');
+  function renderToggles(){
+    toggleSound.dataset.on = settings.sound ? '1' : '0';
+    toggleVibro.dataset.on = settings.vibro ? '1' : '0';
+  }
+  renderToggles();
+  toggleSound.addEventListener('click', function(){
+    settings.sound = !settings.sound; saveSettings(); renderToggles();
+    if (settings.sound) playTone('ok'); else haptic();
+  });
+  toggleVibro.addEventListener('click', function(){
+    settings.vibro = !settings.vibro; saveSettings(); renderToggles();
+    haptic();
+  });
+
+  /* ---------------- АДМІН-ПАНЕЛЬ (лише для адміністратора) ---------------- */
+  var adminCard = document.getElementById('adminCard');
+  var isAdmin = false;
+  async function checkAdmin(){
+    if (!liveMode) return;
+    try { var r = await api('/api/admin/whoami', {}); isAdmin = !!r.is_admin; adminCard.style.display = isAdmin ? '' : 'none'; }
+    catch(e){}
+  }
+
+  var admTarget = document.getElementById('admTarget');
+  var admAmount = document.getElementById('admAmount');
+  var admBalanceBtn = document.getElementById('admBalanceBtn');
+  var admBalanceHint = document.getElementById('admBalanceHint');
+  var admMode = 'add';
+  document.querySelectorAll('.adminmode button').forEach(function(b){
+    b.addEventListener('click', function(){
+      admMode = b.dataset.mode;
+      document.querySelectorAll('.adminmode button').forEach(function(x){ x.classList.toggle('sel', x===b); });
+      haptic();
+    });
+  });
+  admBalanceBtn.addEventListener('click', async function(){
+    var target = (admTarget.value||'').trim();
+    var amount = parseInt(admAmount.value, 10);
+    if (!target || !amount || amount <= 0){ admBalanceHint.textContent = 'Вкажи гравця і суму'; return; }
+    admBalanceBtn.disabled = true;
+    try {
+      var r = await api('/api/admin/balance', {target: target, amount: amount, mode: admMode});
+      admBalanceHint.textContent = (admMode==='add'?'Нараховано ':'Списано ')+amount+' гравцю '+r.target_name+'. Баланс: '+r.balance;
+      admTarget.value=''; admAmount.value='';
+      haptic('ok');
+      loadAdminData();
+    } catch(e){
+      admBalanceHint.textContent = e.error==='not_found' ? 'Гравця не знайдено'
+        : e.error==='insufficient_funds' ? 'У гравця недостатньо монет'
+        : e.error==='forbidden' ? 'Немає доступу' : 'Помилка';
+      haptic('fail');
+    }
+    admBalanceBtn.disabled = false;
+  });
+
+  var admBroadcastText = document.getElementById('admBroadcastText');
+  var admBroadcastBtn = document.getElementById('admBroadcastBtn');
+  var admBroadcastHint = document.getElementById('admBroadcastHint');
+  admBroadcastBtn.addEventListener('click', async function(){
+    var text = (admBroadcastText.value||'').trim();
+    if (!text){ admBroadcastHint.textContent = 'Введи текст'; return; }
+    admBroadcastBtn.disabled = true;
+    try {
+      var r = await api('/api/admin/broadcast', {text: text});
+      admBroadcastHint.textContent = 'Розсилка запущена, отримувачів: '+r.queued;
+      admBroadcastText.value='';
+      haptic('ok');
+    } catch(e){
+      admBroadcastHint.textContent = e.error==='forbidden' ? 'Немає доступу' : 'Не вдалось запустити розсилку';
+      haptic('fail');
+    }
+    admBroadcastBtn.disabled = false;
+  });
+
+  async function loadAdminData(){
+    if (!isAdmin) return;
+    var topEl = document.getElementById('admTopList');
+    var susEl = document.getElementById('admSuspiciousList');
+    try {
+      var r = await api('/api/admin/stats', {});
+      document.getElementById('admUsers').textContent = r.users;
+      document.getElementById('admTotalBal').textContent = r.total_balance;
+      topEl.innerHTML = r.top.map(function(u,i){
+        return '<div class="adminrow"><span>'+(i+1)+'. '+(u.username?'@'+u.username:'ID '+u.user_id)+'</span><b>'+u.balance+'</b></div>';
+      }).join('') || '<p style="color:var(--dim);font-size:.72rem">Немає даних</p>';
+      susEl.innerHTML = r.suspicious.length ? r.suspicious.map(function(s){
+        return '<div class="adminrow"><span>'+(s.username.indexOf('ID:')===0?s.username:'@'+s.username)+'<br><span style="color:var(--dim)">'+s.reason+'</span></span></div>';
+      }).join('') : '<p style="color:var(--dim);font-size:.72rem">Підозрілої активності немає</p>';
+    } catch(e){
+      topEl.innerHTML = '<p style="color:var(--dim);font-size:.72rem">Не вдалось завантажити</p>';
+    }
+  }
+
   var homeLb = document.getElementById('homeLeaderboard');
   async function refreshLeaderboard(){
     if (!liveMode){ homeLb.innerHTML = '<div class="msg">Доступно лише через бота</div>'; return; }
@@ -1012,14 +1222,25 @@
         line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
         dot.setAttribute('cx',x); dot.setAttribute('cy',y);
         if (!liveMode && mult >= localPoint){ crash(localPoint); return; }
-        // Опитуємо сервер раз на ~300мс, щоб вибух показувався одразу, поки
-        // гра ще триває, а не лише в момент натискання "Забрати".
+        // Опитуємо сервер ~5 разів на секунду. Робимо це з двох причин:
+        // 1) вибух видно одразу, поки гра ще триває, а не лише по кліку "Забрати";
+        // 2) підтягуємо локальний годинник (t0) під реальний серверний — інакше
+        //    анімація стартує на клієнті з запізненням (після round-trip запиту
+        //    на ставку) і завжди "відстає" від сервера, через що виграш при
+        //    кешауті рахується за більшим множником, ніж той, що гравець бачив
+        //    на екрані в момент кліку. Звіряючись із сервером щотик, число на
+        //    екрані завжди відповідає тому, за що реально нарахують виграш.
         tick++;
-        if (liveMode && !checking && tick % 3 === 0){
+        if (liveMode && !checking && tick % 2 === 0){
           checking = true;
           api('/api/crash/status', {}).then(function(r){
             checking = false;
-            if (r.crashed){ crash(r.crash_point); }
+            if (r.crashed){ crash(r.crash_point); return; }
+            if (typeof r.mult === 'number'){
+              var serverElapsed = (r.mult - 1) / 0.22;
+              t0 = Date.now() - serverElapsed*1000;
+              mult = r.mult;
+            }
           }).catch(function(){ checking = false; });
         }
       }, 100);
@@ -1478,18 +1699,47 @@
     var msg = document.getElementById('slotsMsg');
     var playing=false;
     var bar = makeBetBar(document.getElementById('slotsBetbar'), 100, play, 'Крутити');
-    var pool = ['7\u20e3','\ud83d\udd14','\ud83c\udf47','\ud83c\udf4b'];
+    // Звичайна "7" замість keycap-символа 7⃣ — у кастомному шрифті він іноді
+    // рендериться як "7" + окремий кружечок, що виглядає як "70". Золотий
+    // колір/світіння на "сімці" дає той самий ефектний вигляд без цього бага.
+    var pool = ['7','\ud83d\udd14','\ud83c\udf47','\ud83c\udf4b'];
+
+    function symSpan(s){ return '<span class="sym'+(s==='7'?' seven':'')+'">'+s+'</span>'; }
+
+    function startSpin(){
+      reels.forEach(function(r){
+        var strip = r.querySelector('.stripwrap');
+        strip.classList.remove('land');
+        strip.style.animation = '';
+        var html = '';
+        for (var i=0;i<5;i++) html += symSpan(pool[Math.floor(Math.random()*pool.length)]);
+        strip.innerHTML = html;
+        r.classList.add('spin');
+      });
+    }
+
+    function stopReel(i, finalSym, won){
+      var r = reels[i];
+      var strip = r.querySelector('.stripwrap');
+      r.classList.remove('spin');
+      strip.style.animation = 'none';
+      strip.innerHTML = symSpan(finalSym);
+      if (won) strip.querySelector('.sym').classList.add('won');
+      void strip.offsetWidth;
+      strip.classList.add('land');
+    }
 
     async function play(amount){
       if (playing) return;
       if (!liveMode && balance < amount){ msg.textContent='Недостатньо монет'; return; }
       playing = true; bar.setPlaying(true,'Крутиться...'); msg.textContent='Крутиться...';
-      reels.forEach(function(r){ r.classList.add('spin'); });
+      startSpin();
 
-      var reel, reward;
+      var reel, reward, newBalance;
       if (liveMode){
-        try { var r = await api('/api/slots/play', {amount:amount}); reel=r.reel; reward=r.reward; }
+        try { var r = await api('/api/slots/play', {amount:amount}); reel=r.reel; reward=r.reward; newBalance=r.balance; }
         catch(e){ playing=false; bar.setPlaying(false,'Крутити'); reels.forEach(function(x){x.classList.remove('spin');}); msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка'; return; }
+        setBalance(newBalance - reward);
       } else {
         var val = 1+Math.floor(Math.random()*64);
         if (val===64) reel=[pool[0],pool[0],pool[0]];
@@ -1499,19 +1749,17 @@
         setBalance(balance-amount);
       }
 
-      [300,500,700].forEach(function(delay, i){
-        setTimeout(function(){
-          reels[i].classList.remove('spin');
-          reels[i].innerHTML = '<span class="sym'+(reward?' won':'')+'">'+reel[i]+'</span>';
-        }, delay);
+      [300,550,800].forEach(function(delay, i){
+        setTimeout(function(){ stopReel(i, reel[i], !!reward); }, delay);
       });
 
       setTimeout(function(){
         playing=false; bar.setPlaying(false,'Крутити');
-        if (reward) setBalance(balance+reward);
+        if (liveMode) setBalance(newBalance);
+        else if (reward) setBalance(balance+reward);
         msg.textContent = reward ? ('Комбінація! \u00b7 +'+reward+' монет') : 'Не склалось';
         haptic(reward?'ok':'fail');
-      }, 900);
+      }, 950);
     }
   })();
 
