@@ -120,6 +120,15 @@ def call_async(coro):
     return fut.result(timeout=10)
 
 
+def fire_and_forget(coro):
+    """Как call_async, но не ждёт результата — для длинных фоновых задач
+    (например, рассылка сотням пользователей), которые не должны держать
+    HTTP-запрос открытым."""
+    if BOT_LOOP is None:
+        raise RuntimeError("Бот ещё не запущен")
+    asyncio.run_coroutine_threadsafe(coro, BOT_LOOP)
+
+
 WEB_LOGIN_TOKENS = {}
 WEB_LOGIN_LOCK = threading.Lock()
 WEB_LOGIN_TTL = 600          # скільки секунд дійсне посилання для входу
@@ -195,6 +204,23 @@ def authed_user():
         if uid:
             return uid, ""
     return None
+
+
+def admin_auth():
+    """Повертає (uid, username), лише якщо авторизований користувач — адмін
+    (ADMIN_USERNAME); інакше None. На сайті поза Telegram authed_user() не
+    знає юзернейм (там лише підписана сесія на uid), тому в такому разі
+    підтягуємо його з бази перед звіркою."""
+    auth = authed_user()
+    if not auth:
+        return None
+    uid, username = auth
+    if not username:
+        row = call_async(get_user(uid))
+        username = row[1] if row else ""
+    if username != ADMIN_USERNAME:
+        return None
+    return uid, username
 
 
 # Живое состояние игр, открытых через Mini App (отдельно от игр в самом
@@ -403,6 +429,116 @@ def api_transfer():
     balance = call_async(get_user(uid))[2]
     target_name = target_db[1] or str(target_db[0])
     return {"balance": balance, "target_name": target_name, "amount": amount}
+
+
+# ---------- WEB ADMIN PANEL (тільки для ADMIN_USERNAME) ----------
+# Той самий набір можливостей, що й у адмін-меню бота (баланс, розсилка,
+# статистика, підозрілі гравці), але як API для вкладки "Адмін" у Mini App.
+# Жодних нових прав не додає — лише дублює дію на тому самому Telegram-акаунті.
+
+@app.route("/api/admin/whoami", methods=["POST"])
+def api_admin_whoami():
+    """Фронтенд викликає це, щоб тихо перевірити, чи показувати вкладку
+    "Адмін" у профілі — без помилок у консолі для звичайних гравців."""
+    auth = admin_auth()
+    return {"is_admin": bool(auth)}
+
+
+@app.route("/api/admin/stats", methods=["POST"])
+def api_admin_stats():
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    count, total_bal = call_async(db("SELECT COUNT(*), SUM(balance) FROM users", None, "one"))
+    top_rows = call_async(db(
+        "SELECT username, balance, user_id FROM users ORDER BY balance DESC LIMIT 10",
+        None, "all",
+    ))
+    top = [{"username": r[0] or "", "balance": r[1], "user_id": r[2]} for r in top_rows]
+    suspicious = [
+        {"user_id": uid, "username": info["username"], "reason": info["reason"], "time": info["time"]}
+        for uid, info in suspicious_users_log.items()
+    ]
+    return {
+        "users": count,
+        "total_balance": total_bal or 0,
+        "top": top,
+        "suspicious": suspicious,
+    }
+
+
+@app.route("/api/admin/balance", methods=["POST"])
+def api_admin_balance():
+    """Видати/забрати баланс у гравця — те саме, що кнопки "Видати баланс" /
+    "Забрать баланс" у чаті бота, лише з веб-панелі."""
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    body = request.get_json(silent=True) or {}
+    target_input = str(body.get("target", "")).strip()
+    amount = body.get("amount")
+    mode = body.get("mode")
+    if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+        return {"error": "bad_amount"}, 400
+    if mode not in ("add", "sub"):
+        return {"error": "bad_mode"}, 400
+    if not target_input:
+        return {"error": "bad_target"}, 400
+
+    target_db = call_async(get_by_identifier(target_input))
+    if not target_db:
+        return {"error": "not_found"}, 404
+
+    if mode == "add":
+        call_async(add_balance(target_db[0], amount))
+    else:
+        if not call_async(spend(target_db[0], amount)):
+            return {"error": "insufficient_funds"}, 400
+
+    new_row = call_async(get_user(target_db[0]))
+    try:
+        note = "➕ Адміністратор нарахував вам " if mode == "add" else "➖ Адміністратор списав у вас "
+        call_async(BOT_APP.bot.send_message(
+            target_db[0], f"{note}{amount} 💰. Баланс: {new_row[2]}"
+        ))
+    except Exception:
+        pass
+
+    return {"target_name": new_row[1] or str(new_row[0]), "balance": new_row[2]}
+
+
+@app.route("/api/admin/broadcast", methods=["POST"])
+def api_admin_broadcast():
+    """Розсилка тексту всім гравцям бота — фонова задача, HTTP-відповідь не
+    чекає на завершення (користувачів може бути багато)."""
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    text = str((request.get_json(silent=True) or {}).get("text", "")).strip()
+    if not text:
+        return {"error": "bad_request"}, 400
+
+    count = call_async(db("SELECT COUNT(*) FROM users", None, "one"))[0]
+    fire_and_forget(_web_broadcast(text))
+    return {"queued": count}
+
+
+async def _web_broadcast(text):
+    rows = await db("SELECT user_id FROM users", None, "all")
+    success, blocked = 0, 0
+    for (uid,) in rows:
+        try:
+            await BOT_APP.bot.send_message(uid, text)
+            success += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            blocked += 1
+    try:
+        admin_db = await get_by_identifier(ADMIN_USERNAME)
+        if admin_db:
+            await BOT_APP.bot.send_message(
+                admin_db[0],
+                f"✅ Розсилка із сайту завершена!\n📥 Доставлено: {success}\n🚫 Блок: {blocked}",
+            )
+    except Exception:
+        pass
 
 
 @app.route("/api/mines/bet", methods=["POST"])
