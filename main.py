@@ -239,6 +239,30 @@ MIN_BET = int(os.getenv("MINI_APP_MIN_BET", "10"))
 MAX_BET = int(os.getenv("MINI_APP_MAX_BET", "100000000"))
 
 
+# ---------- КРАМНИЦЯ: обводки аватарки та теми оформлення ----------
+# Статичний каталог — фронтенд знає ті самі id й малює відповідний
+# вигляд сам (кольори/емодзі), сервер лише перевіряє ціну/власність.
+SHOP_ITEMS = {
+    "border_cyan":  {"type": "border", "name": "Блакитна обводка",  "price": 300},
+    "border_green": {"type": "border", "name": "Смарагдова обводка", "price": 400},
+    "border_pink":  {"type": "border", "name": "Рожева обводка",     "price": 400},
+    "border_gold":  {"type": "border", "name": "Золота обводка",     "price": 600},
+    "border_fire":  {"type": "border", "name": "🔥 Вогняна обводка", "price": 1200},
+    "border_ears":  {"type": "border", "name": "🐰 Вушка",           "price": 1500},
+    "border_crown": {"type": "border", "name": "👑 Королівська",     "price": 2500},
+    "theme_gold":   {"type": "theme", "name": "Золота тема",     "price": 400},
+    "theme_cyber":  {"type": "theme", "name": "Кіберпанк",       "price": 800},
+    "theme_emerald":{"type": "theme", "name": "Смарагдова тема", "price": 800},
+    "theme_crimson":{"type": "theme", "name": "Багряна тема",    "price": 800},
+    "theme_violet": {"type": "theme", "name": "Фіолетова тема",  "price": 800},
+}
+
+# ---------- АПГРЕЙД: колесо з жовтим/сірим сектором ----------
+UPGRADE_MIN_MULT = 1.2
+UPGRADE_MAX_MULT = 20.0
+UPGRADE_HOUSE_EDGE = 0.05  # той самий дух хаус-еджу, що й в інших іграх
+
+
 def _parse_amount(body):
     """Игрок сам выбирает ставку — проверяем, что это вменяемое целое
     число, а не отрицательное/дробное/огромное значение из подделанного
@@ -309,6 +333,7 @@ def api_me():
     db_user = call_async(get_user(uid, username))
     last_bonus = db_user[3] or 0
     next_bonus_at = last_bonus + 86400
+    border, theme = call_async(get_equipped(uid))
     return {
         "balance": db_user[2],
         "username": db_user[1] or "",
@@ -317,6 +342,8 @@ def api_me():
         "referrals_count": db_user[5] or 0,
         "bonus_ready": int(time.time()) >= next_bonus_at,
         "next_bonus_at": next_bonus_at,
+        "equipped_border": border,
+        "equipped_theme": theme,
     }
 
 
@@ -429,6 +456,180 @@ def api_transfer():
     balance = call_async(get_user(uid))[2]
     target_name = target_db[1] or str(target_db[0])
     return {"balance": balance, "target_name": target_name, "amount": amount}
+
+
+# ---------- ПОПОВНЕННЯ БАЛАНСУ З MINI APP ----------
+# Той самий конвертер і ті самі два способи оплати, що й у чаті бота:
+# Telegram Stars (миттєво, автоматично — той самий successful_payment_callback)
+# або картка зі скриншотом чека на підтвердження адміном.
+
+def _bot_username():
+    try:
+        if BOT_APP and BOT_APP.bot.username:
+            return BOT_APP.bot.username
+    except Exception:
+        pass
+    return os.getenv("BOT_USERNAME", "NeonCasinoXBot")
+
+
+@app.route("/api/donate/invoice", methods=["POST"])
+def api_donate_invoice():
+    """Створює посилання на рахунок Telegram Stars — фронтенд відкриває
+    його через tg.openInvoice() прямо в Mini App, оплата миттєва й
+    автоматична (нараховує successful_payment_callback, той самий, що й
+    для оплати в чаті)."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    body = request.get_json(silent=True) or {}
+    coins = body.get("amount")
+    if not isinstance(coins, int) or isinstance(coins, bool) or coins < 100:
+        return {"error": "bad_amount"}, 400
+
+    call_async(get_user(uid, username))
+    uah_cost = round(coins / 100, 2)
+    stars_cost = max(1, int(uah_cost * STARS_PER_UAH))
+    try:
+        link = call_async(BOT_APP.bot.create_invoice_link(
+            title=f"Поповнення {coins} монет",
+            description=f"Зарахування {coins} монет на ігровий баланс у NEON CASINO",
+            payload=f"deposit_{coins}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label=f"{coins} Монет", amount=stars_cost)],
+        ))
+    except Exception:
+        return {"error": "invoice_failed"}, 500
+
+    return {"link": link, "stars": stars_cost, "uah": uah_cost}
+
+
+@app.route("/api/donate/card", methods=["POST"])
+def api_donate_card():
+    """Для оплати карткою (і для сайту поза Telegram, де tg.openInvoice
+    недоступний) — ті самі реквізити, що й у чаті, плюс deep-link у бота,
+    який одразу переводить у режим "чекаю скриншот чека" (/start
+    deposit_<amount>, обробляється в start())."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    body = request.get_json(silent=True) or {}
+    coins = body.get("amount")
+    if not isinstance(coins, int) or isinstance(coins, bool) or coins < 100:
+        return {"error": "bad_amount"}, 400
+
+    uah_cost = round(coins / 100, 2)
+    deeplink = f"https://t.me/{_bot_username()}?start=deposit_{coins}"
+    return {"card": CARD_NUMBER, "uah": uah_cost, "deeplink": deeplink}
+
+
+# ---------- КРАМНИЦЯ: каталог, покупка, екіпіровка ----------
+@app.route("/api/shop/catalog", methods=["POST"])
+def api_shop_catalog():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    owned = call_async(owned_items(uid))
+    border, theme = call_async(get_equipped(uid))
+    items = [
+        dict(id=iid, type=meta["type"], name=meta["name"], price=meta["price"], owned=iid in owned)
+        for iid, meta in SHOP_ITEMS.items()
+    ]
+    balance = call_async(get_user(uid))[2]
+    return {"items": items, "equipped_border": border, "equipped_theme": theme, "balance": balance}
+
+
+@app.route("/api/shop/buy", methods=["POST"])
+def api_shop_buy():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    item_id = str((request.get_json(silent=True) or {}).get("item_id", ""))
+    meta = SHOP_ITEMS.get(item_id)
+    if not meta:
+        return {"error": "not_found"}, 404
+
+    call_async(get_user(uid, username))
+    if item_id in call_async(owned_items(uid)):
+        return {"error": "already_owned"}, 400
+    if not call_async(spend(uid, meta["price"])):
+        return {"error": "insufficient_funds"}, 400
+    call_async(buy_item(uid, item_id))
+
+    balance = call_async(get_user(uid))[2]
+    return {"balance": balance, "item_id": item_id}
+
+
+@app.route("/api/shop/equip", methods=["POST"])
+def api_shop_equip():
+    """item_id порожній рядок знімає екіпіровку (повертає стандартний
+    вигляд) — власність при цьому перевіряти не треба."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, _ = auth
+    body = request.get_json(silent=True) or {}
+    item_id = str(body.get("item_id", ""))
+    slot = body.get("slot")
+    if slot not in ("border", "theme"):
+        return {"error": "bad_slot"}, 400
+
+    if item_id:
+        meta = SHOP_ITEMS.get(item_id)
+        if not meta or meta["type"] != slot:
+            return {"error": "not_found"}, 404
+        if item_id not in call_async(owned_items(uid)):
+            return {"error": "not_owned"}, 400
+
+    call_async(set_equipped(uid, slot, item_id))
+    return {"ok": True, "slot": slot, "item_id": item_id}
+
+
+# ---------- АПГРЕЙД: колесо з жовтим (виграш) і сірим (програш) сектором ----------
+@app.route("/api/upgrade/play", methods=["POST"])
+def api_upgrade_play():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    body = request.get_json(silent=True) or {}
+    amount = _parse_amount(body)
+    if amount is None:
+        return {"error": "bad_amount"}, 400
+    multiplier = body.get("multiplier")
+    if not isinstance(multiplier, (int, float)) or isinstance(multiplier, bool):
+        return {"error": "bad_multiplier"}, 400
+    multiplier = round(float(multiplier), 2)
+    if multiplier < UPGRADE_MIN_MULT or multiplier > UPGRADE_MAX_MULT:
+        return {"error": "bad_multiplier"}, 400
+
+    call_async(get_user(uid, username))
+    if not call_async(spend(uid, amount)):
+        return {"error": "insufficient_funds"}, 400
+
+    # Шанс на виграш — обернено пропорційний бажаному множнику, з
+    # хаус-еджем, той самий принцип, що й на CS-скін сайтах: що вищий
+    # множник обираєш, то вужчий жовтий сектор колеса.
+    chance = max(0.02, min(0.95, (1 / multiplier) * (1 - UPGRADE_HOUSE_EDGE)))
+    roll = random.random()
+    win = roll < chance
+    reward = int(amount * multiplier) if win else 0
+    if reward:
+        call_async(add_balance(uid, reward))
+
+    balance = call_async(get_user(uid))[2]
+    return {
+        "win": win,
+        "reward": reward,
+        "chance": round(chance, 4),
+        "roll": roll,
+        "multiplier": multiplier,
+        "balance": balance,
+    }
 
 
 # ---------- WEB ADMIN PANEL (тільки для ADMIN_USERNAME) ----------
@@ -640,7 +841,12 @@ def api_crash_bet():
 @app.route("/api/crash/status", methods=["POST"])
 def api_crash_status():
     """Фронтенд опитує це під час польоту, щоб вибух показувався одразу,
-    поки гра ще триває, а не лише в момент натискання "Забрати"."""
+    поки гра ще триває, а не лише в момент натискання "Забрати". Важливо:
+    цей ендпоінт лише ПІДГЛЯДАЄ стан і нічого не видаляє з web_crash_games —
+    раніше він сам забирав (pop) гру при виявленні краху, і якщо гравець
+    саме в цю мить тиснув "Забрати", запит кешауту приходив вже на порожнє
+    місце й бачив помилку "гру вже завершено" замість чесного "вибух"/
+    виграшу. Єдине місце, що реально завершує раунд (pop) — /api/crash/cashout."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -654,10 +860,7 @@ def api_crash_status():
         elapsed = time.time() - game["start"]
         current_mult = _crash_mult_at(elapsed)
         if current_mult >= game["crash_point"]:
-            web_crash_games.pop(uid, None)
-            call_async(clear_active_game(uid))
-            balance = call_async(get_user(uid))[2]
-            return {"crashed": True, "crash_point": game["crash_point"], "balance": balance}
+            return {"crashed": True, "crash_point": game["crash_point"]}
 
     return {"crashed": False, "mult": current_mult}
 
@@ -1064,6 +1267,18 @@ CREATE TABLE IF NOT EXISTS active_games (
     started_at BIGINT
 )
 """)
+_db_sync("""
+CREATE TABLE IF NOT EXISTS user_items (
+    user_id BIGINT,
+    item_id TEXT,
+    PRIMARY KEY (user_id, item_id)
+)
+""")
+# Косметика профілю (крамниця) — додаємо колонки на вже існуючу таблицю
+# users, якщо її ще не було (ALTER ... IF NOT EXISTS, щоб спокійно
+# перезапускатись на вже створеній базі).
+_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
+_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
 
 
 # ---------- GRACEFUL SHUTDOWN: сохранение активных ставок ----------
@@ -1232,6 +1447,33 @@ async def get_by_identifier(identifier):
     if identifier.isdigit():
         return await db("SELECT * FROM users WHERE user_id=?", (int(identifier),), "one")
     return await db("SELECT * FROM users WHERE username=?", (identifier,), "one")
+
+
+# ---------- КРАМНИЦЯ: власність і екіпіровка косметики ----------
+async def owned_items(uid):
+    rows = await db("SELECT item_id FROM user_items WHERE user_id=?", (uid,), "all")
+    return {r[0] for r in rows}
+
+
+async def buy_item(uid, item_id):
+    await db(
+        "INSERT INTO user_items (user_id, item_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+        (uid, item_id),
+    )
+
+
+async def get_equipped(uid):
+    row = await db(
+        "SELECT equipped_border, equipped_theme FROM users WHERE user_id=?", (uid,), "one"
+    )
+    if not row:
+        return "", ""
+    return row[0] or "", row[1] or ""
+
+
+async def set_equipped(uid, slot, item_id):
+    col = "equipped_border" if slot == "border" else "equipped_theme"
+    await db(f"UPDATE users SET {col}=? WHERE user_id=?", (item_id, uid))
 
 
 async def top10():
@@ -1584,6 +1826,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         await update.message.reply_text("🎰 NEON CASINO", reply_markup=menu(is_admin))
         return
+
+    if context.args and context.args[0].startswith("deposit_"):
+        try:
+            coins = int(context.args[0][len("deposit_"):])
+        except ValueError:
+            coins = 0
+        if coins >= 100:
+            context.user_data["deposit_requested_coins"] = coins
+            awaiting_receipt.add(user.id)
+            uah_cost = round(coins / 100, 2)
+            await update.message.reply_text(
+                f"💳 **Поповнення з сайту**\n\n"
+                f"💰 Монет: **{coins}**\n"
+                f"💵 До сплати: **{uah_cost} грн**\n"
+                f"📌 Реквізити картки:\n`{CARD_NUMBER}`\n\n"
+                f"Після переказу надішли сюди скріншот чека 📸",
+                parse_mode="Markdown",
+            )
+            return
 
     if context.args and context.args[0].startswith("ref_"):
         try:
