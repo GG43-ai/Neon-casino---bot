@@ -17,6 +17,14 @@
     padding-top:env(safe-area-inset-top,0px);
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
+  /* ТЕМИ з крамниці — перефарбовують лише "брендові" кольори
+     (pink/cyan/gold), а --green/--red лишаються семантикою
+     виграшу/програшу в усіх іграх, тому теми ніде не ламають сенс кольору. */
+  :root[data-theme="gold"]{ --pink:#ffb020; --cyan:#ffe08a; --gold:#fff1b8; }
+  :root[data-theme="cyber"]{ --pink:#a855f7; --cyan:#22d3ee; --gold:#c084fc; }
+  :root[data-theme="emerald"]{ --pink:#10b981; --cyan:#5eead4; --gold:#6ee7b7; }
+  :root[data-theme="crimson"]{ --pink:#ef4444; --cyan:#fb7185; --gold:#fca5a5; }
+  :root[data-theme="violet"]{ --pink:#8b5cf6; --cyan:#c4b5fd; --gold:#d8b4fe; }
   *{box-sizing:inherit;margin:0;padding:0}
   html,body{height:100%}
   body{background:radial-gradient(ellipse 80% 50% at 50% -10%, #2a123f 0%, var(--bg) 55%);color:var(--text);font-family:'Manrope',sans-serif;overflow-x:hidden}
@@ -203,7 +211,22 @@
   @keyframes symwin{from{transform:scale(1)}to{transform:scale(1.18)}}
 
   .profhead{display:flex;flex-direction:column;align-items:center;padding-top:6px;margin-bottom:6px}
-  .avatar{width:76px;height:76px;border-radius:50%;background:linear-gradient(145deg,var(--pink),var(--cyan));display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 3px rgba(255,255,255,.08),0 0 24px rgba(255,45,120,.3);margin-bottom:10px}
+  .avatar{position:relative;width:76px;height:76px;border-radius:50%;background:linear-gradient(145deg,var(--pink),var(--cyan));display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 3px rgba(255,255,255,.08),0 0 24px rgba(255,45,120,.3);margin-bottom:10px}
+  .avatar.small{width:40px;height:40px;margin-bottom:0}
+  .avatar.b-border_cyan{box-shadow:0 0 0 3px var(--cyan),0 0 16px rgba(25,232,255,.5)}
+  .avatar.b-border_green{box-shadow:0 0 0 3px var(--green),0 0 16px rgba(43,255,163,.5)}
+  .avatar.b-border_pink{box-shadow:0 0 0 3px var(--pink),0 0 16px rgba(255,45,120,.5)}
+  .avatar.b-border_gold{box-shadow:0 0 0 3px var(--gold),0 0 16px rgba(255,195,66,.5)}
+  .avatar.b-border_fire{box-shadow:0 0 0 3px var(--red),0 0 18px rgba(255,59,59,.6);animation:fireGlow 1.4s ease-in-out infinite alternate}
+  @keyframes fireGlow{from{box-shadow:0 0 0 3px var(--red),0 0 10px rgba(255,59,59,.5)}to{box-shadow:0 0 0 3px var(--gold),0 0 22px rgba(255,195,66,.8)}}
+  .avatar.b-border_ears{box-shadow:0 0 0 3px var(--pink),0 0 16px rgba(255,45,120,.5)}
+  .avatar.b-border_ears::before,.avatar.b-border_ears::after{content:'';position:absolute;top:-9px;width:14px;height:20px;background:var(--pink);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;z-index:1}
+  .avatar.b-border_ears::before{left:4px;transform:rotate(-18deg)}
+  .avatar.b-border_ears::after{right:4px;transform:rotate(18deg)}
+  .avatar.b-border_crown{box-shadow:0 0 0 3px var(--gold),0 0 16px rgba(255,195,66,.5)}
+  .avatar.b-border_crown::before{content:'\1F451';position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:1.05rem;z-index:1}
+  .avatar.small.b-border_ears::before,.avatar.small.b-border_ears::after{top:-6px;width:9px;height:13px}
+  .avatar.small.b-border_crown::before{top:-11px;font-size:.78rem}
   .avatar img{width:100%;height:100%;object-fit:cover}
   .avatar span{font-family:'Unbounded',sans-serif;font-weight:800;font-size:1.6rem;color:#180512}
   .pname{font-family:'Unbounded',sans-serif;font-size:.92rem}
@@ -251,6 +274,42 @@
   .adminmode button.sel{border-color:var(--green);color:var(--green)}
   .adminmode button.sel[data-mode="sub"]{border-color:var(--red);color:var(--red)}
   textarea.broadcastinput{width:100%;min-height:80px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:10px 12px;color:var(--text);font-size:.8rem;font-family:inherit;margin-bottom:8px;resize:vertical}
+
+  /* DONATE */
+  .donatechips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .donatechips button{padding:10px 4px;border-radius:10px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);font-size:.76rem;font-weight:700}
+  .donatechips button.sel{border-color:var(--gold);color:var(--gold)}
+  .donaterow{display:flex;flex-direction:column;gap:8px}
+  .donaterow button{padding:11px;border-radius:11px;font-weight:700;font-family:'Unbounded',sans-serif;font-size:.74rem;display:flex;align-items:center;justify-content:center;gap:6px}
+  .donaterow .pay-stars{background:var(--gold);color:#241700}
+  .donaterow .pay-card{background:var(--bg2);border:1px solid rgba(255,255,255,.12)}
+
+  /* SHOP (КРАМНИЦЯ) */
+  .shoptabs{display:flex;gap:8px;margin-bottom:16px;background:var(--panel);border-radius:12px;padding:4px}
+  .shoptabs button{flex:1;padding:9px;border-radius:9px;font-size:.76rem;font-weight:700;color:var(--dim)}
+  .shoptabs button.active{background:var(--bg2);color:var(--text)}
+  .shopgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .shopitem{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .shopitem .swatch{width:46px;height:46px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+  .shopitem .sname{font-size:.68rem;color:var(--dim);min-height:2.1em}
+  .shopitem .sprice{font-family:'Unbounded',sans-serif;font-size:.74rem;color:var(--gold)}
+  .shopitem button{width:100%;padding:8px;border-radius:9px;font-size:.68rem;font-weight:700;background:var(--green);color:#052013}
+  .shopitem button.equipped{background:var(--bg2);color:var(--green);border:1px solid var(--green)}
+  .shopitem button.owned{background:var(--bg2);border:1px solid rgba(255,255,255,.14)}
+  .shopitem button:disabled{opacity:.4}
+  .shopitem.sel-theme .swatch{box-shadow:0 0 0 2px var(--gold)}
+
+  /* UPGRADE WHEEL */
+  .upgwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px}
+  .upgwheel{position:relative;width:200px;height:200px;margin-bottom:14px}
+  .upgwheel svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .upgarrow{position:absolute;top:50%;left:50%;width:4px;height:92px;margin-left:-2px;margin-top:-92px;transform-origin:50% 100%;background:linear-gradient(var(--text),var(--dim));border-radius:3px;transition:transform 2.4s cubic-bezier(.17,.67,.2,1.01)}
+  .upgarrow::after{content:'';position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--text)}
+  .upgcenter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:66px;height:66px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-size:.86rem;font-weight:800;color:var(--gold);border:2px solid rgba(255,255,255,.1)}
+  .upgmultrow{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:10px}
+  .upgmultrow input[type=range]{flex:1;margin:0 10px}
+  .upgstats{display:flex;justify-content:space-between;width:100%;font-size:.68rem;color:var(--dim);margin-bottom:14px}
+  .upgstats b{color:var(--text)}
   .quickgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
   .quickbtn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 2px;border-radius:14px;background:var(--panel);border:1px solid rgba(255,255,255,.06)}
   .quickbtn:active{transform:scale(.95)}
@@ -556,6 +615,19 @@
         <div class="pbal"><div class="big" id="profBalance">—</div><div class="lbl">монет</div></div>
 
         <div class="hrow2">
+          <div class="hcard">
+            <h4>💳 Поповнити</h4>
+            <p>100 💰 = 1 грн / 1 ⭐</p>
+            <button class="hbtn" id="openDonateBtn" data-goto="donate">Поповнити</button>
+          </div>
+          <div class="hcard">
+            <h4>🛒 Крамниця</h4>
+            <p>Обводки, теми, апгрейд</p>
+            <button class="hbtn" id="openShopBtn" data-goto="shop">Відкрити</button>
+          </div>
+        </div>
+
+        <div class="hrow2">
           <div class="hcard bonus">
             <h4>🎁 Щоденний бонус</h4>
             <p id="bonusHint">+50 монет кожні 24 год</p>
@@ -648,6 +720,77 @@
         <div class="hcard" style="margin-bottom:18px">
           <h4>🚨 Підозрілі гравці</h4>
           <div class="adminlist" id="admSuspiciousList"><p style="color:var(--dim);font-size:.72rem">Підозрілої активності немає</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DONATE -->
+    <section class="page" data-page="donate">
+      <div class="pagebody">
+        <h2 class="gametitle">💳 Поповнення</h2>
+        <p class="gamesub">100 монет = 1 грн = 1 Stars ⭐</p>
+
+        <div class="hcard" style="margin-bottom:18px">
+          <h4>Скільки монет?</h4>
+          <div class="donatechips">
+            <button data-v="500">500</button>
+            <button class="sel" data-v="1000">1000</button>
+            <button data-v="2500">2500</button>
+            <button data-v="5000">5000</button>
+          </div>
+          <div class="promorow" style="margin-bottom:14px">
+            <input id="donateAmount" placeholder="Своя сума" inputmode="numeric" autocomplete="off" value="1000">
+          </div>
+          <p id="donateCostHint" style="color:var(--dim);font-size:.72rem;margin-bottom:12px">≈ 10 грн / 10 ⭐</p>
+          <div class="donaterow">
+            <button class="pay-stars" id="payStarsBtn">⭐ Оплатити Stars</button>
+            <button class="pay-card" id="payCardBtn">💳 Оплатити карткою</button>
+          </div>
+          <p id="donateHint" style="margin-top:10px;margin-bottom:0;color:var(--dim);font-size:.72rem"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHOP -->
+    <section class="page" data-page="shop">
+      <div class="pagebody">
+        <h2 class="gametitle">🛒 Крамниця</h2>
+        <p class="gamesub">Косметика профілю й апгрейд</p>
+
+        <div class="shoptabs">
+          <button class="active" data-shoptab="cosmetics">Косметика</button>
+          <button data-shoptab="upgrade">Апгрейд</button>
+        </div>
+
+        <div id="shopCosmetics">
+          <div class="hsection-title"><h3 style="font-size:.78rem;color:var(--dim)">Обводки аватарки</h3></div>
+          <div class="shopgrid" id="borderGrid"></div>
+          <div class="hsection-title"><h3 style="font-size:.78rem;color:var(--dim)">Теми оформлення</h3></div>
+          <div class="shopgrid" id="themeGrid"></div>
+        </div>
+
+        <div id="shopUpgrade" style="display:none">
+          <div class="upgwrap">
+            <div class="upgwheel">
+              <svg viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="44" fill="none" stroke="#555" stroke-width="10"/>
+                <circle id="upgArc" cx="50" cy="50" r="44" fill="none" stroke="var(--gold)" stroke-width="10" stroke-dasharray="69 207" stroke-dashoffset="0"/>
+              </svg>
+              <div class="upgarrow" id="upgArrow"></div>
+              <div class="upgcenter" id="upgCenter">x2.00</div>
+            </div>
+            <div class="upgmultrow">
+              <span style="font-size:.68rem;color:var(--dim)">x1.2</span>
+              <input type="range" id="upgSlider" min="120" max="2000" step="10" value="200">
+              <span style="font-size:.68rem;color:var(--dim)">x20</span>
+            </div>
+            <div class="upgstats">
+              <span>Шанс: <b id="upgChance">—</b></span>
+              <span>Виграш: <b id="upgWin">—</b></span>
+            </div>
+          </div>
+          <div class="betbar" id="upgradeBetbar"></div>
+          <div class="msg" id="upgradeMsg">Обери множник і ставку</div>
         </div>
       </div>
     </section>
@@ -1222,16 +1365,19 @@
         line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
         dot.setAttribute('cx',x); dot.setAttribute('cy',y);
         if (!liveMode && mult >= localPoint){ crash(localPoint); return; }
-        // Опитуємо сервер ~5 разів на секунду. Робимо це з двох причин:
-        // 1) вибух видно одразу, поки гра ще триває, а не лише по кліку "Забрати";
-        // 2) підтягуємо локальний годинник (t0) під реальний серверний — інакше
-        //    анімація стартує на клієнті з запізненням (після round-trip запиту
-        //    на ставку) і завжди "відстає" від сервера, через що виграш при
-        //    кешауті рахується за більшим множником, ніж той, що гравець бачив
-        //    на екрані в момент кліку. Звіряючись із сервером щотик, число на
-        //    екрані завжди відповідає тому, за що реально нарахують виграш.
+        // Опитуємо сервер щотик (~10 разів на секунду) — без штучного
+        // пропуску тіків, щоб вибух і кешаут відчувались миттєво. Робимо
+        // це з двох причин: 1) вибух видно одразу, поки гра ще триває, а
+        // не лише по кліку "Забрати"; 2) підтягуємо локальний годинник
+        // (t0) під реальний серверний — інакше анімація стартує на
+        // клієнті із запізненням (після round-trip запиту на ставку) і
+        // завжди "відстає" від сервера. /api/crash/status лише ПІДГЛЯДАЄ
+        // стан (нічого не видаляє), тому навіть якщо він і кешаут
+        // прилетять на сервер практично одночасно — кешаут завжди бачить
+        // гру і чесно відповідає виграшем або вибухом, а не "гру вже
+        // завершено".
         tick++;
-        if (liveMode && !checking && tick % 2 === 0){
+        if (liveMode && !checking){
           checking = true;
           api('/api/crash/status', {}).then(function(r){
             checking = false;
