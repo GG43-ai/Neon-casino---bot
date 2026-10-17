@@ -85,7 +85,9 @@
 
   .betbar{flex:none;border-top:1px solid rgba(255,255,255,.08);background:var(--bg2);padding:14px 18px calc(14px + env(safe-area-inset-bottom,0px))}
   .betrow{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-  .betrow .amt{flex:1;text-align:center;font-family:'Unbounded',sans-serif;font-size:1.1rem;color:var(--gold)}
+  .betrow .amt{flex:1;text-align:center;font-family:'Unbounded',sans-serif;font-size:1.1rem;color:var(--gold);background:none;border:none;outline:none;padding:4px 0;width:0;min-width:0;-moz-appearance:textfield}
+  .betrow .amt::-webkit-outer-spin-button,.betrow .amt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .betrow .amt:focus{color:var(--text)}
   .stepbtn{width:36px;height:36px;border-radius:11px;background:var(--panel);border:1px solid rgba(255,255,255,.1);font-size:1.1rem;font-weight:700}
   .chipsrow{display:flex;gap:7px;margin-bottom:12px}
   .chipbtn{flex:1;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 0;font-size:.74rem;color:var(--dim)}
@@ -1356,7 +1358,7 @@
       '</div>' +
       '<div class="betrow">' +
         '<button class="stepbtn" data-d="-1">\u2212</button>' +
-        '<div class="amt" id="amtDisplay">'+amount+'</div>' +
+        '<input class="amt" id="amtDisplay" type="text" inputmode="numeric" autocomplete="off" value="'+amount+'">' +
         '<button class="stepbtn" data-d="1">+</button>' +
       '</div>' +
       '<button class="playbtn" id="playBtn">'+playLabel+'</button>';
@@ -1369,7 +1371,7 @@
     function maxBet(){ return Math.max(MIN_BET, balance); }
     function clamp(v){ return Math.max(MIN_BET, Math.min(v, Math.max(balance,MIN_BET))); }
     function render(){
-      amtEl.textContent = amount;
+      if (document.activeElement !== amtEl) amtEl.value = amount;
       chipBtns.forEach(function(b){ b.classList.toggle('sel', parseInt(b.dataset.v,10) === amount); });
       allinBtn.classList.toggle('sel', amount === maxBet());
     }
@@ -1384,13 +1386,25 @@
       b.addEventListener('click', function(){ amount = clamp(parseInt(b.dataset.v,10)); render(); haptic(); });
     });
     allinBtn.addEventListener('click', function(){ amount = maxBet(); render(); haptic(); });
-    playBtn.onclick = function(){ onPlay(amount); };
+    // \u0412\u0456\u043b\u044c\u043d\u0438\u0439 \u0432\u0432\u0456\u0434 \u0441\u0432\u043e\u0454\u0457 \u0441\u0443\u043c\u0438 \u043f\u0440\u044f\u043c\u043e \u0432 \u043f\u043e\u043b\u0456 \u0441\u0442\u0430\u0432\u043a\u0438 \u2014 \u043d\u0435 \u043a\u043b\u0456\u043f\u0430\u0454\u043c\u043e \u043d\u0430 \u043a\u043e\u0436\u0435\u043d
+    // \u0441\u0438\u043c\u0432\u043e\u043b (\u0456\u043d\u0430\u043a\u0448\u0435 \u043d\u0435\u043c\u043e\u0436\u043b\u0438\u0432\u043e \u0431\u0443\u043b\u043e \u0431 \u0441\u0442\u0435\u0440\u0442\u0438 \u0439 \u0432\u0432\u0435\u0441\u0442\u0438 \u043d\u043e\u0432\u0435 \u0447\u0438\u0441\u043b\u043e), \u043b\u0438\u0448\u0435
+    // \u043a\u043e\u043b\u0438 \u043a\u043e\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447 \u0437\u0430\u043a\u0456\u043d\u0447\u0438\u0432 (blur / Enter) \u0430\u0431\u043e \u043e\u0434\u0440\u0430\u0437\u0443 \u043d\u0430\u0442\u0438\u0441\u043d\u0443\u0432 "\u0413\u0440\u0430\u0442\u0438".
+    amtEl.addEventListener('input', function(){
+      var v = parseInt(amtEl.value.replace(/[^0-9]/g,''), 10);
+      if (!isNaN(v)) amount = v;
+    });
+    amtEl.addEventListener('blur', function(){ amount = clamp(amount); render(); });
+    amtEl.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ amount = clamp(amount); render(); amtEl.blur(); }
+    });
+    playBtn.onclick = function(){ amount = clamp(amount); render(); onPlay(amount); };
     render();
 
     return {
       setPlaying: function(isPlaying, label){
         chipBtns.forEach(function(b){ b.disabled = isPlaying; });
         container.querySelectorAll('.stepbtn').forEach(function(b){ b.disabled = isPlaying; });
+        amtEl.disabled = isPlaying;
         playBtn.textContent = label;
       },
       setCashMode: function(on, label){ playBtn.classList.toggle('cash', on); playBtn.textContent = label; },
