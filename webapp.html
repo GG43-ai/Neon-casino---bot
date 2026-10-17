@@ -666,6 +666,15 @@
         </div>
 
         <div class="hcard" style="margin-bottom:18px">
+          <h4>✏️ Нікнейм</h4>
+          <p id="nickHint">Як тебе бачать інші в топі та профілі</p>
+          <div class="promorow">
+            <input id="nickInput" placeholder="Твій нік" maxlength="18" autocomplete="off">
+            <button id="nickBtn">Зберегти</button>
+          </div>
+        </div>
+
+        <div class="hcard" style="margin-bottom:18px">
           <h4>🎨 Тема оформлення</h4>
           <p>Безкоштовно — обери й одразу застосується</p>
           <div class="shopgrid" id="themeGrid"></div>
@@ -995,7 +1004,8 @@
     var avatarEl = document.getElementById('profAvatar');
     var initEl = document.getElementById('profAvatarInit');
     var tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-    var name = (tgUser && (tgUser.username ? '@'+tgUser.username : tgUser.first_name)) ||
+    var name = (meData && meData.nickname) ||
+               (tgUser && (tgUser.username ? '@'+tgUser.username : tgUser.first_name)) ||
                (meData && meData.username ? '@'+meData.username : null) || 'Гравець';
     nameEl.textContent = name;
     var photo = tgUser && tgUser.photo_url;
@@ -1003,6 +1013,10 @@
       avatarEl.innerHTML = '<img src="'+photo+'" alt="">';
     } else {
       initEl.textContent = name.replace('@','').charAt(0).toUpperCase() || '?';
+    }
+    var nickInputEl = document.getElementById('nickInput');
+    if (nickInputEl && document.activeElement !== nickInputEl && meData){
+      nickInputEl.value = meData.nickname || '';
     }
   }
   updateProfileHead();
@@ -1142,6 +1156,28 @@
         haptic();
       }
     } catch(e){}
+  });
+
+  var nickInput = document.getElementById('nickInput');
+  var nickBtn = document.getElementById('nickBtn');
+  var nickHint = document.getElementById('nickHint');
+  nickBtn.addEventListener('click', async function(){
+    var nick = (nickInput.value||'').trim();
+    if (!liveMode){ nickHint.textContent = 'Доступно лише через бота'; haptic('fail'); return; }
+    nickBtn.disabled = true;
+    try {
+      var r = await api('/api/profile/nickname', {nickname: nick});
+      if (meData) meData.nickname = r.nickname;
+      updateProfileHead();
+      nickHint.textContent = r.nickname ? 'Збережено!' : 'Нік прибрано — показуємо @username';
+      haptic('ok');
+    } catch(e){
+      nickHint.textContent = e.error==='too_long' ? 'Задовго (макс. 18 символів)'
+        : e.error==='bad_chars' ? 'Лише літери, цифри, пробіл, крапка, дефіс'
+        : 'Не вдалось зберегти';
+      haptic('fail');
+    }
+    nickBtn.disabled = false;
   });
 
   var promoInput = document.getElementById('promoInput');
@@ -1294,7 +1330,8 @@
       if (!r.items || !r.items.length){ homeLb.innerHTML = '<div class="msg">Поки немає даних</div>'; return; }
       homeLb.innerHTML = r.items.map(function(it, i){
         var rc = i===0?'r1':i===1?'r2':i===2?'r3':'';
-        var avatar = '<div class="lbavatar-wrap'+(it.border?' spin-ring':'')+'"><div class="avatar small'+(it.border?' b-'+it.border:'')+'"></div></div>';
+        var initial = esc((it.name||'?').replace('@','').charAt(0).toUpperCase() || '?');
+        var avatar = '<div class="lbavatar-wrap'+(it.border?' spin-ring':'')+'"><div class="avatar small'+(it.border?' b-'+it.border:'')+'"><span style="font-size:.62rem">'+initial+'</span></div></div>';
         return '<div class="lbrow '+rc+(it.you?' me':'')+'"><span class="rank">'+(i+1)+'</span>'+avatar+'<span class="name">'+(it.you?'Ти':esc(it.name))+'</span><span class="amt">'+it.balance+'</span></div>';
       }).join('');
     } catch(e){ homeLb.innerHTML = '<div class="msg">Не вдалось завантажити</div>'; }
@@ -2062,6 +2099,9 @@
       if (spinning) return;
       if (!liveMode){ msg.textContent = 'Увійди через бота, щоб грати'; return; }
       var mult = multFromSlider();
+      renderWheel(); // гарантує, що жовтий/сірий сектор на колесі рендериться
+                     // саме для цього mult, а не для застарілого значення, яке
+                     // міг ще не підхопити періодичний рендер (раз на 400мс)
       spinning = true; bar.setPlaying(true,'Крутиться...'); msg.textContent = 'Крутиться...';
       slider.disabled = true;
       var r;
@@ -2072,7 +2112,16 @@
         return;
       }
       setBalance(r.balance - (r.win ? r.reward : 0));
-      spinTotal += 360*3 + r.roll*360;
+      // ВАЖЛИВО: кінцевий кут стрілки має дорівнювати ТОЧНО r.roll*360 за
+      // модулем 360, інакше стрілка візуально "пливе" від реального
+      // результату з кожним наступним спіном. Раніше тут був `spinTotal +=
+      // roll*360`, що накопичувало суму ВСІХ попередніх roll — через
+      // кілька спінів стрілка вже зупинялась не там, де мало бути (звідси
+      // "влучило в сіре, а написало виграш" і навпаки). Тепер beрем лише
+      // ціле число повних обертів від поточної позиції й додаємо до нього
+      // точний кут поточного roll.
+      var baseTurns = Math.floor(spinTotal / 360) + 3;
+      spinTotal = baseTurns * 360 + r.roll * 360;
       arrow.style.transform = 'rotate('+spinTotal+'deg)';
       setTimeout(function(){
         spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
