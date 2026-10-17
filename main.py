@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 import psycopg2
@@ -370,9 +371,16 @@ def api_me():
     last_bonus = db_user[3] or 0
     next_bonus_at = last_bonus + 86400
     border, theme = call_async(get_equipped(uid))
+    nickname = call_async(get_nickname(uid))
+    # Прибираємо застарілі web_mines_games/web_crash_games тут теж — фронтенд
+    # опитує /api/me при кожному переході між сторінками, тож "залипла" гра
+    # зникає сама набагато раніше, ніж гравець встигне тицьнути нову ставку.
+    with WEB_GAME_LOCK:
+        _clear_stale_games(uid)
     return {
         "balance": db_user[2],
         "username": db_user[1] or "",
+        "nickname": nickname,
         "min_bet": MIN_BET,
         "max_bet": MAX_BET,
         "referrals_count": db_user[5] or 0,
@@ -381,6 +389,24 @@ def api_me():
         "equipped_border": border,
         "equipped_theme": theme,
     }
+
+
+@app.route("/api/profile/nickname", methods=["POST"])
+def api_profile_nickname():
+    """Власний нікнейм для показу в профілі й топі — не чіпає Telegram
+    @username, лише те, як гравця видно всередині NEON CASINO."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    nickname = str((request.get_json(silent=True) or {}).get("nickname", "")).strip()
+    if len(nickname) > 18:
+        return {"error": "too_long"}, 400
+    if nickname and not re.match(r"^[\w Ѐ-ӿ.\-]{1,18}$", nickname):
+        return {"error": "bad_chars"}, 400
+    call_async(set_nickname(uid, nickname))
+    return {"ok": True, "nickname": nickname}
 
 
 @app.route("/api/bonus/claim", methods=["POST"])
@@ -405,12 +431,14 @@ def api_leaderboard():
         return {"error": "unauthorized"}, 401
     uid, _ = auth
     rows = call_async(db(
-        "SELECT user_id, username, balance, equipped_border FROM users ORDER BY balance DESC LIMIT 10",
+        "SELECT user_id, username, balance, equipped_border, nickname FROM users ORDER BY balance DESC LIMIT 10",
         None, "all",
     ))
     items = [
         {
-            "user_id": r[0], "name": r[1] or f"Гравець {r[0]}", "balance": r[2],
+            "user_id": r[0],
+            "name": (r[4] or "").strip() or (("@" + r[1]) if r[1] else f"Гравець {r[0]}"),
+            "balance": r[2],
             "you": r[0] == uid, "border": r[3] or "",
         }
         for r in rows
@@ -1381,6 +1409,7 @@ CREATE TABLE IF NOT EXISTS user_items (
 # перезапускатись на вже створеній базі).
 _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
 _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
+_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
 _db_sync("""
 CREATE TABLE IF NOT EXISTS pending_deposits (
     id SERIAL PRIMARY KEY,
@@ -1613,6 +1642,15 @@ async def get_equipped(uid):
 async def set_equipped(uid, slot, item_id):
     col = "equipped_border" if slot == "border" else "equipped_theme"
     await db(f"UPDATE users SET {col}=? WHERE user_id=?", (item_id, uid))
+
+
+async def get_nickname(uid):
+    row = await db("SELECT nickname FROM users WHERE user_id=?", (uid,), "one")
+    return (row[0] or "") if row else ""
+
+
+async def set_nickname(uid, nickname):
+    await db("UPDATE users SET nickname=? WHERE user_id=?", (nickname, uid))
 
 
 async def top10():
