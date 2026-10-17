@@ -25,6 +25,11 @@
   :root[data-theme="emerald"]{ --pink:#10b981; --cyan:#5eead4; --gold:#6ee7b7; }
   :root[data-theme="crimson"]{ --pink:#ef4444; --cyan:#fb7185; --gold:#fca5a5; }
   :root[data-theme="violet"]{ --pink:#8b5cf6; --cyan:#c4b5fd; --gold:#d8b4fe; }
+  :root[data-theme="ice"]{ --pink:#38bdf8; --cyan:#a5f3fc; --gold:#e0f2fe; }
+  :root[data-theme="sunset"]{ --pink:#fb923c; --cyan:#f472b6; --gold:#fde68a; }
+  :root[data-theme="ocean"]{ --pink:#0ea5e9; --cyan:#2dd4bf; --gold:#7dd3fc; }
+  :root[data-theme="matrix"]{ --pink:#22c55e; --cyan:#4ade80; --gold:#86efac; }
+  :root[data-theme="royal"]{ --pink:#6366f1; --cyan:#fbbf24; --gold:#fcd34d; }
   *{box-sizing:inherit;margin:0;padding:0}
   html,body{height:100%}
   body{background:radial-gradient(ellipse 80% 50% at 50% -10%, #2a123f 0%, var(--bg) 55%);color:var(--text);font-family:'Manrope',sans-serif;overflow-x:hidden}
@@ -227,6 +232,31 @@
   .avatar.b-border_crown::before{content:'\1F451';position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:1.05rem;z-index:1}
   .avatar.small.b-border_ears::before,.avatar.small.b-border_ears::after{top:-6px;width:9px;height:13px}
   .avatar.small.b-border_crown::before{top:-11px;font-size:.78rem}
+  .avatar.b-border_silver{box-shadow:0 0 0 3px #cfd3da,0 0 16px rgba(207,211,218,.5)}
+  .avatar.b-border_violet{box-shadow:0 0 0 3px #8b5cf6,0 0 16px rgba(139,92,246,.5)}
+  .avatar.b-border_ice{box-shadow:0 0 0 3px #7dd3fc,0 0 16px rgba(125,211,252,.6)}
+  .avatar.b-border_skull{box-shadow:0 0 0 3px #cfd3da,0 0 16px rgba(207,211,218,.4)}
+  .avatar.b-border_skull::before{content:'\1F480';position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:1.05rem;z-index:1}
+  .avatar.small.b-border_skull::before{top:-11px;font-size:.78rem}
+  .avatar.b-border_cat{box-shadow:0 0 0 3px var(--gold),0 0 16px rgba(255,195,66,.5)}
+  .avatar.b-border_cat::before,.avatar.b-border_cat::after{content:'';position:absolute;top:-8px;width:12px;height:14px;background:var(--gold);clip-path:polygon(0 100%,50% 0,100% 100%);z-index:1}
+  .avatar.b-border_cat::before{left:6px;transform:rotate(-12deg)}
+  .avatar.b-border_cat::after{right:6px;transform:rotate(12deg)}
+  .avatar.small.b-border_cat::before,.avatar.small.b-border_cat::after{top:-5px;width:8px;height:10px}
+  .avatar.b-border_horns{box-shadow:0 0 0 3px var(--red),0 0 16px rgba(255,59,59,.5)}
+  .avatar.b-border_horns::before,.avatar.b-border_horns::after{content:'';position:absolute;top:-8px;width:8px;height:16px;background:var(--red);border-radius:50% 50% 0 0;z-index:1}
+  .avatar.b-border_horns::before{left:10px;transform:rotate(-22deg)}
+  .avatar.b-border_horns::after{right:10px;transform:rotate(22deg)}
+  .avatar.small.b-border_horns::before,.avatar.small.b-border_horns::after{top:-5px;width:5px;height:10px}
+  .avatar.b-border_halo{box-shadow:0 0 0 3px var(--gold),0 0 16px rgba(255,195,66,.5)}
+  .avatar.b-border_halo::before{content:'';position:absolute;top:-16px;left:50%;transform:translateX(-50%);width:26px;height:9px;border:3px solid var(--gold);border-radius:50%;box-shadow:0 0 8px rgba(255,195,66,.7);z-index:1}
+  .avatar.small.b-border_halo::before{top:-11px;width:17px;height:6px;border-width:2px}
+  .avatar.b-border_rainbow{box-shadow:0 0 0 3px transparent;background-image:linear-gradient(var(--black),var(--black)),conic-gradient(from 0deg,#ff2d78,#ffc342,#2bffa3,#19e8ff,#8b5cf6,#ff2d78);background-origin:border-box;background-clip:padding-box,border-box;border:3px solid transparent;animation:rainbowSpin 3s linear infinite}
+  @keyframes rainbowSpin{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}
+  .avatar.b-border_galaxy{box-shadow:0 0 0 3px #8b5cf6,0 0 20px rgba(139,92,246,.7);background:radial-gradient(circle at 30% 30%,#312e81,#0a0613 70%)}
+  .avatar.b-border_diamond{box-shadow:0 0 0 3px #a5f3fc,0 0 20px rgba(165,243,252,.8)}
+  .avatar.b-border_diamond::before{content:'\1F48E';position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:1rem;z-index:1}
+  .avatar.small.b-border_diamond::before{top:-11px;font-size:.75rem}
   .avatar img{width:100%;height:100%;object-fit:cover}
   .avatar span{font-family:'Unbounded',sans-serif;font-weight:800;font-size:1.6rem;color:#180512}
   .pname{font-family:'Unbounded',sans-serif;font-size:.92rem}
@@ -1016,8 +1046,8 @@
   var navbtns = document.querySelectorAll('.navbtn');
   var titleEl = document.getElementById('pageTitle');
   var backBtn = document.getElementById('backBtn');
-  var titles = {home:'NEON CASINO',games:'Ігри',crash:'Краш',mines:'Міни',roulette:'Рулетка',coinflip:'Монетка',basket:'Баскетбол',football:'Футбол',darts:'Дартс',bowling:'Боулінг',slots:'Слоти',profile:'Профіль',admin:'Адмін-панель'};
-  var navMap = {home:'home',games:'games',crash:'games',mines:'games',roulette:'games',coinflip:'games',basket:'games',football:'games',darts:'games',bowling:'games',slots:'games',profile:'profile',admin:'profile'};
+  var titles = {home:'NEON CASINO',games:'Ігри',crash:'Краш',mines:'Міни',roulette:'Рулетка',coinflip:'Монетка',basket:'Баскетбол',football:'Футбол',darts:'Дартс',bowling:'Боулінг',slots:'Слоти',profile:'Профіль',admin:'Адмін-панель',donate:'Поповнення',shop:'Крамниця'};
+  var navMap = {home:'home',games:'games',crash:'games',mines:'games',roulette:'games',coinflip:'games',basket:'games',football:'games',darts:'games',bowling:'games',slots:'games',profile:'profile',admin:'profile',donate:'profile',shop:'profile'};
 
   function goto(name){
     pages.forEach(function(p){ p.classList.toggle('active', p.dataset.page === name); });
@@ -1026,6 +1056,8 @@
     backBtn.classList.toggle('show', name !== 'home' && name !== 'games' && name !== 'profile');
     refreshBalance(); // підтягуємо актуальний баланс із Neon при кожному переході
     if (name === 'admin') loadAdminData();
+    if (name === 'shop') loadShop();
+    if (name === 'donate') updateDonateHint();
     haptic();
   }
   document.querySelectorAll('[data-goto]').forEach(function(el){
@@ -1907,6 +1939,239 @@
         haptic(reward?'ok':'fail');
       }, 950);
     }
+  })();
+
+  /* ================= КОСМЕТИКА (застосування екіпірованого) ================= */
+  function applyCosmetics(){
+    if (!meData) return;
+    var av = document.getElementById('profAvatar');
+    av.className = 'avatar' + (meData.equipped_border ? ' b-'+meData.equipped_border : '');
+    var themeId = meData.equipped_theme || '';
+    document.documentElement.setAttribute('data-theme', themeId.replace(/^theme_/, ''));
+  }
+  var _origUpdateProfileHead = updateProfileHead;
+  updateProfileHead = function(){ _origUpdateProfileHead(); applyCosmetics(); };
+
+  /* ================= КРАМНИЦЯ: косметика ================= */
+  (function(){
+    var borderGrid = document.getElementById('borderGrid');
+    var themeGrid = document.getElementById('themeGrid');
+    var shopItems = [];
+    var shopEquipped = {border:'', theme:''};
+
+    document.querySelectorAll('[data-shoptab]').forEach(function(b){
+      b.addEventListener('click', function(){
+        document.querySelectorAll('[data-shoptab]').forEach(function(x){ x.classList.toggle('active', x===b); });
+        var cosmetics = document.getElementById('shopCosmetics');
+        var upgrade = document.getElementById('shopUpgrade');
+        if (b.dataset.shoptab === 'cosmetics'){ cosmetics.style.display=''; upgrade.style.display='none'; }
+        else { cosmetics.style.display='none'; upgrade.style.display=''; }
+        haptic();
+      });
+    });
+
+    function cardHtml(it){
+      var btnLabel = it.owned ? (isEquipped(it) ? 'Екіпіровано' : 'Одягти') : (it.price+' 💰');
+      var btnCls = it.owned ? (isEquipped(it) ? 'equipped' : 'owned') : '';
+      var swatchInner = it.type === 'border'
+        ? '<div class="avatar small '+(it.id?'b-'+it.id:'')+'" style="width:40px;height:40px"></div>'
+        : '';
+      var swatchStyle = it.type === 'theme' ? ' style="background:'+themeSwatch(it.id)+'"' : '';
+      return '<div class="shopitem '+(it.type==='theme'&&isEquipped(it)?'sel-theme':'')+'" data-id="'+it.id+'">' +
+        '<div class="swatch"'+swatchStyle+'>'+swatchInner+'</div>' +
+        '<div class="sname">'+it.name+'</div>' +
+        '<button class="'+btnCls+'" data-act="'+(it.owned?'equip':'buy')+'" data-id="'+it.id+'">'+btnLabel+'</button>' +
+      '</div>';
+    }
+    function isEquipped(it){ return shopEquipped[it.type] === it.id; }
+    function themeSwatch(id){
+      var map = {theme_gold:'#ffc342',theme_ice:'#7dd3fc',theme_sunset:'#fb923c',theme_ocean:'#0ea5e9',theme_cyber:'#a855f7',theme_emerald:'#10b981',theme_crimson:'#ef4444',theme_violet:'#8b5cf6',theme_matrix:'#22c55e',theme_royal:'#6366f1'};
+      return map[id] || '#888';
+    }
+
+    function render(){
+      var borders = shopItems.filter(function(i){ return i.type==='border'; });
+      var themes = shopItems.filter(function(i){ return i.type==='theme'; });
+      borderGrid.innerHTML = borders.map(cardHtml).join('');
+      themeGrid.innerHTML = themes.map(cardHtml).join('');
+      [borderGrid, themeGrid].forEach(function(grid){
+        grid.querySelectorAll('button[data-act]').forEach(function(btn){
+          btn.addEventListener('click', function(){ onItemAction(btn.dataset.id, btn.dataset.act); });
+        });
+      });
+    }
+
+    async function onItemAction(id, act){
+      try {
+        if (act === 'buy'){
+          var r = await api('/api/shop/buy', {item_id:id});
+          setBalance(r.balance);
+          haptic('ok');
+        } else {
+          var it = shopItems.find(function(x){ return x.id===id; });
+          var nowOn = isEquipped(it);
+          var r2 = await api('/api/shop/equip', {item_id: nowOn ? '' : id, slot: it.type});
+          shopEquipped[it.type] = r2.item_id;
+          if (meData){ meData['equipped_'+it.type] = r2.item_id; applyCosmetics(); }
+          haptic('ok');
+        }
+        await loadShopInner();
+      } catch(e){
+        haptic('fail');
+      }
+    }
+
+    async function loadShopInner(){
+      try {
+        var r = await api('/api/shop/catalog', {});
+        shopItems = r.items;
+        shopEquipped = {border: r.equipped_border||'', theme: r.equipped_theme||''};
+        setBalance(r.balance);
+        render();
+      } catch(e){}
+    }
+    window.loadShop = loadShopInner;
+  })();
+
+  /* ================= АПГРЕЙД (колесо) ================= */
+  (function(){
+    var slider = document.getElementById('upgSlider');
+    var center = document.getElementById('upgCenter');
+    var arc = document.getElementById('upgArc');
+    var arrow = document.getElementById('upgArrow');
+    var chanceEl = document.getElementById('upgChance');
+    var winEl = document.getElementById('upgWin');
+    var msg = document.getElementById('upgradeMsg');
+    var CIRC = 2*Math.PI*44;
+    var spinning = false, spinTotal = 0;
+    var bar = makeBetBar(document.getElementById('upgradeBetbar'), 100, play, 'Апгрейднути');
+
+    function multFromSlider(){ return slider.value/100; }
+    function chanceFor(mult){ return Math.max(0.02, Math.min(0.95, (1/mult)*0.95)); }
+    function renderWheel(){
+      var mult = multFromSlider();
+      var chance = chanceFor(mult);
+      center.textContent = 'x'+mult.toFixed(2);
+      chanceEl.textContent = Math.round(chance*100)+'%';
+      winEl.textContent = Math.round(bar.amount()*mult)+' 💰';
+      arc.setAttribute('stroke-dasharray', (chance*CIRC)+' '+(CIRC-chance*CIRC));
+    }
+    slider.addEventListener('input', function(){ if(!spinning) renderWheel(); });
+    setInterval(function(){ if(!spinning) renderWheel(); }, 400); // підхоплює зміну ставки з betbar
+    renderWheel();
+
+    async function play(amount){
+      if (spinning) return;
+      if (!liveMode){ msg.textContent = 'Увійди через бота, щоб грати'; return; }
+      var mult = multFromSlider();
+      spinning = true; bar.setPlaying(true,'Крутиться...'); msg.textContent = 'Крутиться...';
+      slider.disabled = true;
+      var r;
+      try { r = await api('/api/upgrade/play', {amount:amount, multiplier:mult}); }
+      catch(e){
+        spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
+        msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка';
+        return;
+      }
+      setBalance(r.balance - (r.win ? r.reward : 0));
+      spinTotal += 360*3 + r.roll*360;
+      arrow.style.transform = 'rotate('+spinTotal+'deg)';
+      setTimeout(function(){
+        spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
+        setBalance(r.balance);
+        msg.textContent = r.win ? ('🎉 Влучило! +'+r.reward+' монет') : 'Не влучило — сірий сектор';
+        haptic(r.win?'ok':'fail');
+      }, 2500);
+    }
+  })();
+
+  /* ================= ДОНАТ ================= */
+  (function(){
+    var chips = document.querySelectorAll('.donatechips button');
+    var amountInput = document.getElementById('donateAmount');
+    var hint = document.getElementById('donateCostHint');
+    var statusHint = document.getElementById('donateHint');
+    var payStarsBtn = document.getElementById('payStarsBtn');
+    var payCardBtn = document.getElementById('payCardBtn');
+
+    function currentAmount(){ return Math.max(100, parseInt(amountInput.value,10) || 0); }
+    function updateHint(){
+      var coins = currentAmount();
+      var uah = Math.round((coins/100)*100)/100;
+      hint.textContent = '≈ '+uah+' грн / '+Math.max(1,Math.round(uah))+' ⭐';
+    }
+    window.updateDonateHint = updateHint;
+    chips.forEach(function(b){
+      b.addEventListener('click', function(){
+        chips.forEach(function(x){ x.classList.toggle('sel', x===b); });
+        amountInput.value = b.dataset.v;
+        updateHint(); haptic();
+      });
+    });
+    amountInput.addEventListener('input', function(){
+      chips.forEach(function(x){ x.classList.toggle('sel', x.dataset.v === amountInput.value); });
+      updateHint();
+    });
+    updateHint();
+
+    async function goBotDeposit(path){
+      if (!liveMode){ statusHint.textContent = 'Увійди через бота на головній, щоб поповнити'; return; }
+      var coins = currentAmount();
+      try {
+        var r = await api(path, {amount: coins});
+        var link = r.deeplink;
+        if (tg && tg.openTelegramLink) tg.openTelegramLink(link);
+        else window.open(link, '_blank');
+        statusHint.textContent = 'Відкрито чат з ботом — заверши оплату там';
+        haptic('ok');
+      } catch(e){
+        statusHint.textContent = 'Не вдалось відкрити бота, спробуй ще раз';
+        haptic('fail');
+      }
+    }
+    payStarsBtn.addEventListener('click', function(){ goBotDeposit('/api/donate/invoice'); });
+    payCardBtn.addEventListener('click', function(){ goBotDeposit('/api/donate/card'); });
+  })();
+
+  /* ================= АДМІН: заявки на поповнення ================= */
+  (function(){
+    var listEl = null;
+    function ensureListEl(){
+      if (listEl) return listEl;
+      var card = document.createElement('div');
+      card.className = 'hcard';
+      card.style.marginBottom = '18px';
+      card.innerHTML = '<h4>💳 Заявки на поповнення</h4><div class="adminlist" id="admDeposits"><p style="color:var(--dim);font-size:.72rem">Завантаження...</p></div>';
+      var adminSection = document.querySelector('section[data-page="admin"] .pagebody');
+      adminSection.insertBefore(card, adminSection.lastElementChild);
+      listEl = document.getElementById('admDeposits');
+      return listEl;
+    }
+    async function loadDeposits(){
+      if (!isAdmin) return;
+      var el = ensureListEl();
+      try {
+        var r = await api('/api/admin/deposits', {});
+        if (!r.items.length){ el.innerHTML = '<p style="color:var(--dim);font-size:.72rem">Немає нових заявок</p>'; return; }
+        el.innerHTML = r.items.map(function(d){
+          return '<div class="adminrow" data-dep="'+d.id+'"><span>'+(d.username?'@'+d.username:'ID '+d.user_id)+' — '+d.coins+' 💰</span>' +
+            '<span><button class="depok" data-id="'+d.id+'" style="color:var(--green);margin-right:8px">✓</button>' +
+            '<button class="depno" data-id="'+d.id+'" style="color:var(--red)">✕</button></span></div>';
+        }).join('');
+        el.querySelectorAll('.depok').forEach(function(b){
+          b.addEventListener('click', async function(){
+            try { await api('/api/admin/deposits/approve', {id: parseInt(b.dataset.id,10)}); haptic('ok'); loadDeposits(); } catch(e){ haptic('fail'); }
+          });
+        });
+        el.querySelectorAll('.depno').forEach(function(b){
+          b.addEventListener('click', async function(){
+            try { await api('/api/admin/deposits/decline', {id: parseInt(b.dataset.id,10)}); haptic('ok'); loadDeposits(); } catch(e){ haptic('fail'); }
+          });
+        });
+      } catch(e){ el.innerHTML = '<p style="color:var(--dim);font-size:.72rem">Не вдалось завантажити</p>'; }
+    }
+    var _origLoadAdminData = loadAdminData;
+    loadAdminData = function(){ _origLoadAdminData(); loadDeposits(); };
   })();
 
 })();
