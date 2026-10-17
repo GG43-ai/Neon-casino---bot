@@ -280,16 +280,17 @@ SHOP_ITEMS = {
     "border_crown":  {"type": "border", "name": "👑 Королівська",      "price": 2500},
     "border_galaxy": {"type": "border", "name": "🌌 Галактика",        "price": 3000},
     "border_diamond":{"type": "border", "name": "💎 Діамантова",       "price": 3500},
-    "theme_gold":    {"type": "theme", "name": "Золота тема",     "price": 400},
-    "theme_ice":     {"type": "theme", "name": "Крижана тема",    "price": 600},
-    "theme_sunset":  {"type": "theme", "name": "Тема заходу",     "price": 700},
-    "theme_ocean":   {"type": "theme", "name": "Океанічна тема",  "price": 700},
-    "theme_cyber":   {"type": "theme", "name": "Кіберпанк",       "price": 800},
-    "theme_emerald": {"type": "theme", "name": "Смарагдова тема", "price": 800},
-    "theme_crimson": {"type": "theme", "name": "Багряна тема",    "price": 800},
-    "theme_violet":  {"type": "theme", "name": "Фіолетова тема",  "price": 800},
-    "theme_matrix":  {"type": "theme", "name": "Матриця",         "price": 900},
-    "theme_royal":   {"type": "theme", "name": "Королівська тема","price": 1200},
+    # Теми оформлення — безкоштовна косметика, обирається прямо в профілі.
+    "theme_gold":    {"type": "theme", "name": "Золота тема",     "price": 0},
+    "theme_ice":     {"type": "theme", "name": "Крижана тема",    "price": 0},
+    "theme_sunset":  {"type": "theme", "name": "Тема заходу",     "price": 0},
+    "theme_ocean":   {"type": "theme", "name": "Океанічна тема",  "price": 0},
+    "theme_cyber":   {"type": "theme", "name": "Кіберпанк",       "price": 0},
+    "theme_emerald": {"type": "theme", "name": "Смарагдова тема", "price": 0},
+    "theme_crimson": {"type": "theme", "name": "Багряна тема",    "price": 0},
+    "theme_violet":  {"type": "theme", "name": "Фіолетова тема",  "price": 0},
+    "theme_matrix":  {"type": "theme", "name": "Матриця",         "price": 0},
+    "theme_royal":   {"type": "theme", "name": "Королівська тема","price": 0},
 }
 
 # ---------- АПГРЕЙД: колесо з жовтим/сірим сектором ----------
@@ -404,11 +405,14 @@ def api_leaderboard():
         return {"error": "unauthorized"}, 401
     uid, _ = auth
     rows = call_async(db(
-        "SELECT user_id, username, balance FROM users ORDER BY balance DESC LIMIT 10",
+        "SELECT user_id, username, balance, equipped_border FROM users ORDER BY balance DESC LIMIT 10",
         None, "all",
     ))
     items = [
-        {"user_id": r[0], "name": r[1] or f"Гравець {r[0]}", "balance": r[2], "you": r[0] == uid}
+        {
+            "user_id": r[0], "name": r[1] or f"Гравець {r[0]}", "balance": r[2],
+            "you": r[0] == uid, "border": r[3] or "",
+        }
         for r in rows
     ]
     return {"items": items}
@@ -559,7 +563,8 @@ def api_shop_catalog():
     owned = call_async(owned_items(uid))
     border, theme = call_async(get_equipped(uid))
     items = [
-        dict(id=iid, type=meta["type"], name=meta["name"], price=meta["price"], owned=iid in owned)
+        dict(id=iid, type=meta["type"], name=meta["name"], price=meta["price"],
+             owned=(meta["type"] == "theme") or iid in owned)
         for iid, meta in SHOP_ITEMS.items()
     ]
     balance = call_async(get_user(uid))[2]
@@ -576,6 +581,8 @@ def api_shop_buy():
     meta = SHOP_ITEMS.get(item_id)
     if not meta:
         return {"error": "not_found"}, 404
+    if meta["type"] == "theme":
+        return {"error": "free_item"}, 400
 
     call_async(get_user(uid, username))
     if item_id in call_async(owned_items(uid)):
@@ -606,7 +613,9 @@ def api_shop_equip():
         meta = SHOP_ITEMS.get(item_id)
         if not meta or meta["type"] != slot:
             return {"error": "not_found"}, 404
-        if item_id not in call_async(owned_items(uid)):
+        # Теми оформлення безкоштовні й обираються прямо в профілі — лише
+        # обводки аватарки лишаються платною косметикою з крамниці.
+        if slot != "theme" and item_id not in call_async(owned_items(uid)):
             return {"error": "not_owned"}, 400
 
     call_async(set_equipped(uid, slot, item_id))
