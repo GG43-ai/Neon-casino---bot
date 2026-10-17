@@ -230,6 +230,26 @@ web_mines_games = {}
 web_crash_games = {}
 WEB_GAME_LOCK = threading.Lock()
 
+# Якщо раунд "зависає" (втрачене з'єднання, закритий застосунок, обірваний
+# запит тощо), запис у словнику ніколи сам не зникає, і гравця назавжди
+# блокує "активна гра вже є". Тому перед новою ставкою ми прибираємо
+# застарілі записи: Crash триває щонайбільше ~11.4с (до x100), тож 30с —
+# великий запас; Mines темп задає сам гравець, тож поріг довший.
+MINES_STALE_SEC = 900
+CRASH_STALE_SEC = 30
+
+
+def _clear_stale_games(uid):
+    """Викликати ВСЕРЕДИНІ WEB_GAME_LOCK, перед перевіркою на 'активна гра'."""
+    mg = web_mines_games.get(uid)
+    if mg and time.time() - mg.get("started_at", 0) > MINES_STALE_SEC:
+        web_mines_games.pop(uid, None)
+        call_async(clear_active_game(uid))
+    cg = web_crash_games.get(uid)
+    if cg and time.time() - cg.get("start", 0) > CRASH_STALE_SEC:
+        web_crash_games.pop(uid, None)
+        call_async(clear_active_game(uid))
+
 MIN_BET = int(os.getenv("MINI_APP_MIN_BET", "10"))
 # Бизнес-лимита на максимальную ставку больше нет — "Усе" должно реально
 # ставить весь баланс, сколько бы там ни было. Верхняя граница ниже — не
@@ -243,18 +263,33 @@ MAX_BET = int(os.getenv("MINI_APP_MAX_BET", "100000000"))
 # Статичний каталог — фронтенд знає ті самі id й малює відповідний
 # вигляд сам (кольори/емодзі), сервер лише перевіряє ціну/власність.
 SHOP_ITEMS = {
-    "border_cyan":  {"type": "border", "name": "Блакитна обводка",  "price": 300},
-    "border_green": {"type": "border", "name": "Смарагдова обводка", "price": 400},
-    "border_pink":  {"type": "border", "name": "Рожева обводка",     "price": 400},
-    "border_gold":  {"type": "border", "name": "Золота обводка",     "price": 600},
-    "border_fire":  {"type": "border", "name": "🔥 Вогняна обводка", "price": 1200},
-    "border_ears":  {"type": "border", "name": "🐰 Вушка",           "price": 1500},
-    "border_crown": {"type": "border", "name": "👑 Королівська",     "price": 2500},
-    "theme_gold":   {"type": "theme", "name": "Золота тема",     "price": 400},
-    "theme_cyber":  {"type": "theme", "name": "Кіберпанк",       "price": 800},
-    "theme_emerald":{"type": "theme", "name": "Смарагдова тема", "price": 800},
-    "theme_crimson":{"type": "theme", "name": "Багряна тема",    "price": 800},
-    "theme_violet": {"type": "theme", "name": "Фіолетова тема",  "price": 800},
+    "border_cyan":   {"type": "border", "name": "Блакитна обводка",   "price": 300},
+    "border_green":  {"type": "border", "name": "Смарагдова обводка", "price": 400},
+    "border_pink":   {"type": "border", "name": "Рожева обводка",     "price": 400},
+    "border_gold":   {"type": "border", "name": "Золота обводка",     "price": 600},
+    "border_silver": {"type": "border", "name": "Срібна обводка",     "price": 450},
+    "border_violet": {"type": "border", "name": "Фіолетова обводка",  "price": 500},
+    "border_ice":    {"type": "border", "name": "❄️ Крижана обводка",  "price": 700},
+    "border_fire":   {"type": "border", "name": "🔥 Вогняна обводка",  "price": 1200},
+    "border_skull":  {"type": "border", "name": "💀 Череп",            "price": 1000},
+    "border_ears":   {"type": "border", "name": "🐰 Вушка",            "price": 1500},
+    "border_cat":    {"type": "border", "name": "🐱 Котячі вушка",     "price": 1500},
+    "border_horns":  {"type": "border", "name": "😈 Рога",             "price": 1600},
+    "border_halo":   {"type": "border", "name": "👼 Німб",             "price": 1600},
+    "border_rainbow":{"type": "border", "name": "🌈 Веселка",          "price": 1800},
+    "border_crown":  {"type": "border", "name": "👑 Королівська",      "price": 2500},
+    "border_galaxy": {"type": "border", "name": "🌌 Галактика",        "price": 3000},
+    "border_diamond":{"type": "border", "name": "💎 Діамантова",       "price": 3500},
+    "theme_gold":    {"type": "theme", "name": "Золота тема",     "price": 400},
+    "theme_ice":     {"type": "theme", "name": "Крижана тема",    "price": 600},
+    "theme_sunset":  {"type": "theme", "name": "Тема заходу",     "price": 700},
+    "theme_ocean":   {"type": "theme", "name": "Океанічна тема",  "price": 700},
+    "theme_cyber":   {"type": "theme", "name": "Кіберпанк",       "price": 800},
+    "theme_emerald": {"type": "theme", "name": "Смарагдова тема", "price": 800},
+    "theme_crimson": {"type": "theme", "name": "Багряна тема",    "price": 800},
+    "theme_violet":  {"type": "theme", "name": "Фіолетова тема",  "price": 800},
+    "theme_matrix":  {"type": "theme", "name": "Матриця",         "price": 900},
+    "theme_royal":   {"type": "theme", "name": "Королівська тема","price": 1200},
 }
 
 # ---------- АПГРЕЙД: колесо з жовтим/сірим сектором ----------
@@ -474,10 +509,11 @@ def _bot_username():
 
 @app.route("/api/donate/invoice", methods=["POST"])
 def api_donate_invoice():
-    """Створює посилання на рахунок Telegram Stars — фронтенд відкриває
-    його через tg.openInvoice() прямо в Mini App, оплата миттєва й
-    автоматична (нараховує successful_payment_callback, той самий, що й
-    для оплати в чаті)."""
+    """Поповнення Stars відбувається В ЧАТІ бота (а не через tg.openInvoice()
+    прямо в Mini App) — так адмін і сам гравець бачать один спільний
+    журнал оплат, і не треба тримати два різні шляхи нарахування. Тому цей
+    ендпоінт лише повертає deep-link, який одразу виставляє рахунок Stars
+    у чаті (/start deposit_stars_<amount> → обробляється в start())."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -490,27 +526,15 @@ def api_donate_invoice():
     call_async(get_user(uid, username))
     uah_cost = round(coins / 100, 2)
     stars_cost = max(1, int(uah_cost * STARS_PER_UAH))
-    try:
-        link = call_async(BOT_APP.bot.create_invoice_link(
-            title=f"Поповнення {coins} монет",
-            description=f"Зарахування {coins} монет на ігровий баланс у NEON CASINO",
-            payload=f"deposit_{coins}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(label=f"{coins} Монет", amount=stars_cost)],
-        ))
-    except Exception:
-        return {"error": "invoice_failed"}, 500
-
-    return {"link": link, "stars": stars_cost, "uah": uah_cost}
+    deeplink = f"https://t.me/{_bot_username()}?start=deposit_stars_{coins}"
+    return {"deeplink": deeplink, "stars": stars_cost, "uah": uah_cost}
 
 
 @app.route("/api/donate/card", methods=["POST"])
 def api_donate_card():
-    """Для оплати карткою (і для сайту поза Telegram, де tg.openInvoice
-    недоступний) — ті самі реквізити, що й у чаті, плюс deep-link у бота,
-    який одразу переводить у режим "чекаю скриншот чека" (/start
-    deposit_<amount>, обробляється в start())."""
+    """Для оплати карткою — deep-link у бота, який одразу переводить у
+    режим "чекаю скриншот чека" (/start deposit_<amount>, обробляється в
+    start()); реквізити картки гравець бачить вже в чаті."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -721,6 +745,73 @@ def api_admin_broadcast():
     return {"queued": count}
 
 
+@app.route("/api/admin/deposits", methods=["POST"])
+def api_admin_deposits():
+    """Заявки на поповнення карткою (скриншот чека вже надіслано в чат) —
+    та сама черга, що й повідомлення в Telegram, лише видно й на сайті."""
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    return {"items": call_async(list_pending_deposits())}
+
+
+@app.route("/api/admin/deposits/approve", methods=["POST"])
+def api_admin_deposits_approve():
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    body = request.get_json(silent=True) or {}
+    dep_id = body.get("id")
+    if not isinstance(dep_id, int) or isinstance(dep_id, bool):
+        return {"error": "bad_request"}, 400
+
+    row = call_async(db(
+        "SELECT user_id, coins, status FROM pending_deposits WHERE id=?", (dep_id,), "one",
+    ))
+    if not row:
+        return {"error": "not_found"}, 404
+    target_id, coins, status = row
+    amount = body.get("amount")
+    add_coins = amount if isinstance(amount, int) and not isinstance(amount, bool) and amount > 0 else coins
+    if status != "pending":
+        return {"error": "already_resolved"}, 409
+
+    call_async(get_user(target_id))
+    call_async(add_balance(target_id, add_coins))
+    call_async(resolve_pending_deposit(dep_id, "approved"))
+    try:
+        call_async(BOT_APP.bot.send_message(
+            target_id, f"🎉 Ваш баланс успішно поповнено на +{add_coins} 💰!"
+        ))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.route("/api/admin/deposits/decline", methods=["POST"])
+def api_admin_deposits_decline():
+    if not admin_auth():
+        return {"error": "forbidden"}, 403
+    body = request.get_json(silent=True) or {}
+    dep_id = body.get("id")
+    if not isinstance(dep_id, int) or isinstance(dep_id, bool):
+        return {"error": "bad_request"}, 400
+
+    row = call_async(db("SELECT user_id, status FROM pending_deposits WHERE id=?", (dep_id,), "one"))
+    if not row:
+        return {"error": "not_found"}, 404
+    target_id, status = row
+    if status != "pending":
+        return {"error": "already_resolved"}, 409
+
+    call_async(resolve_pending_deposit(dep_id, "declined"))
+    try:
+        call_async(BOT_APP.bot.send_message(
+            target_id, "❌ Вашу заявку на поповнення відхилено адміністратором."
+        ))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 async def _web_broadcast(text):
     rows = await db("SELECT user_id FROM users", None, "all")
     success, blocked = 0, 0
@@ -753,6 +844,7 @@ def api_mines_bet():
         return {"error": "bad_amount"}, 400
 
     with WEB_GAME_LOCK:
+        _clear_stale_games(uid)
         if uid in web_mines_games or uid in web_crash_games:
             return {"error": "active_game"}, 409
 
@@ -761,7 +853,7 @@ def api_mines_bet():
 
         grid = ["bomb"] * 5 + ["gem"] * 20
         random.shuffle(grid)
-        web_mines_games[uid] = {"grid": grid, "opened": [False] * 25, "mult": 1.0, "bet": amount}
+        web_mines_games[uid] = {"grid": grid, "opened": [False] * 25, "mult": 1.0, "bet": amount, "started_at": time.time()}
         call_async(track_active_game(uid, "mines_webapp", uid, amount))
 
     balance = call_async(get_user(uid))[2]
@@ -824,6 +916,7 @@ def api_crash_bet():
         return {"error": "bad_amount"}, 400
 
     with WEB_GAME_LOCK:
+        _clear_stale_games(uid)
         if uid in web_mines_games or uid in web_crash_games:
             return {"error": "active_game"}, 409
 
@@ -1279,6 +1372,43 @@ CREATE TABLE IF NOT EXISTS user_items (
 # перезапускатись на вже створеній базі).
 _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
 _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
+_db_sync("""
+CREATE TABLE IF NOT EXISTS pending_deposits (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT,
+    username TEXT,
+    coins INTEGER,
+    status TEXT DEFAULT 'pending',
+    created_at BIGINT
+)
+""")
+
+
+async def add_pending_deposit(uid, username, coins):
+    """Заявка на поповнення карткою з'являється тут одразу, як гравець
+    скинув чек у чат — щоб адмін бачив її і на сайті, а не лише в Telegram."""
+    row = await db(
+        "INSERT INTO pending_deposits (user_id, username, coins, status, created_at) "
+        "VALUES (?, ?, ?, 'pending', ?) RETURNING id",
+        (uid, username or "", coins, int(time.time())), "one",
+    )
+    return row[0] if row else None
+
+
+async def list_pending_deposits():
+    rows = await db(
+        "SELECT id, user_id, username, coins, created_at FROM pending_deposits "
+        "WHERE status='pending' ORDER BY created_at DESC", None, "all",
+    )
+    return [
+        {"id": r[0], "user_id": r[1], "username": r[2], "coins": r[3], "created_at": r[4]}
+        for r in (rows or [])
+    ]
+
+
+async def resolve_pending_deposit(dep_id, status):
+    if dep_id:
+        await db("UPDATE pending_deposits SET status=? WHERE id=?", (status, dep_id))
 
 
 # ---------- GRACEFUL SHUTDOWN: сохранение активных ставок ----------
@@ -1651,19 +1781,19 @@ def deposit_card_menu():
     ])
 
 
-def admin_receipt_keyboard(user_id, requested_coins):
+def admin_receipt_keyboard(dep_id, user_id, requested_coins):
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                f"✅ Зачислить {requested_coins} 💰", callback_data=f"approve_exact_{user_id}_{requested_coins}"
+                f"✅ Зачислить {requested_coins} 💰", callback_data=f"approve_exact_{dep_id}_{user_id}_{requested_coins}"
             )
         ],
         [
             InlineKeyboardButton(
-                "✏ Другая сумма", callback_data=f"approve_custom_{user_id}"
+                "✏ Другая сумма", callback_data=f"approve_custom_{dep_id}_{user_id}"
             ),
             InlineKeyboardButton(
-                "❌ Отклонить", callback_data=f"decline_dep_{user_id}"
+                "❌ Отклонить", callback_data=f"decline_dep_{dep_id}_{user_id}"
             ),
         ]
     ])
@@ -1826,6 +1956,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         await update.message.reply_text("🎰 NEON CASINO", reply_markup=menu(is_admin))
         return
+
+    if context.args and context.args[0].startswith("deposit_stars_"):
+        try:
+            coins = int(context.args[0][len("deposit_stars_"):])
+        except ValueError:
+            coins = 0
+        if coins >= 100:
+            uah_cost = round(coins / 100, 2)
+            stars_cost = max(1, int(uah_cost * STARS_PER_UAH))
+            await context.bot.send_invoice(
+                chat_id=user.id,
+                title=f"Поповнення {coins} монет",
+                description=f"Зарахування {coins} монет на ігровий баланс у NEON CASINO",
+                payload=f"deposit_{coins}",
+                provider_token="",
+                currency="XTR",
+                prices=[LabeledPrice(label=f"{coins} Монет", amount=stars_cost)],
+                start_parameter="deposit_stars",
+            )
+            return
 
     if context.args and context.args[0].startswith("deposit_"):
         try:
@@ -2132,6 +2282,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         admin_id = admin_db[0]
         user_info = f"@{user.username}" if user.username else f"ID: {user.id}"
         requested_coins = context.user_data.get("deposit_requested_coins", 0)
+        dep_id = await add_pending_deposit(user.id, user.username or "", requested_coins)
 
         caption_text = (
             f"💳 **НОВАЯ ЗАЯВКА НА ПОПОЛНЕНИЕ!**\n\n"
@@ -2146,7 +2297,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo=photo_id,
                 caption=caption_text,
                 parse_mode="Markdown",
-                reply_markup=admin_receipt_keyboard(user.id, requested_coins),
+                reply_markup=admin_receipt_keyboard(dep_id, user.id, requested_coins),
             )
             await update.message.reply_text(
                 "✅ Скриншот отправлен администратору на проверку! Ожидайте зачисления монет."
@@ -2230,6 +2381,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             add_coins = int(text)
             await get_user(target_id)
             await add_balance(target_id, add_coins)
+            await resolve_pending_deposit(action_data.get("dep_id"), "approved")
             await update.message.reply_text(
                 f"✅ Баланс игрока `{target_id}` пополнен на **+{add_coins} монет**!",
                 parse_mode="Markdown",
@@ -2385,10 +2537,12 @@ async def cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data.startswith("approve_exact_") and is_admin:
         parts = data.split("_")
-        target_id = int(parts[2])
-        add_coins = int(parts[3])
+        dep_id = int(parts[2])
+        target_id = int(parts[3])
+        add_coins = int(parts[4])
         await get_user(target_id)
         await add_balance(target_id, add_coins)
+        await resolve_pending_deposit(dep_id, "approved")
         await query.message.edit_caption(
             caption=f"{query.message.caption}\n\n✅ **ОДОБРЕНО (+{add_coins} 💰)**",
             parse_mode="Markdown",
@@ -2402,17 +2556,23 @@ async def cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
     elif data.startswith("approve_custom_") and is_admin:
-        target_id = int(data.split("_")[2])
+        parts = data.split("_")
+        dep_id = int(parts[2])
+        target_id = int(parts[3])
         awaiting_admin[user.id] = {
             "action": "approve_deposit",
             "target_id": target_id,
+            "dep_id": dep_id,
         }
         await query.message.reply_text(
             f"✏ Введите **любую другую сумму монет** для зачисления игроку `{target_id}`:",
             parse_mode="Markdown",
         )
     elif data.startswith("decline_dep_") and is_admin:
-        target_id = int(data.split("_")[2])
+        parts = data.split("_")
+        dep_id = int(parts[2])
+        target_id = int(parts[3])
+        await resolve_pending_deposit(dep_id, "declined")
         await query.message.edit_caption(
             caption=f"{query.message.caption}\n\n❌ **ОТКЛОНЕНО АДМИНОМ**",
             parse_mode="Markdown",
