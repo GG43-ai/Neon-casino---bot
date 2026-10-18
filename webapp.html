@@ -285,6 +285,16 @@
   .promorow input{flex:1;min-width:0;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:10px 12px;color:var(--text);font-size:.8rem;text-transform:uppercase}
   .promorow button{padding:0 16px;border-radius:11px;background:var(--green);color:#052013;font-weight:700;font-size:.76rem;font-family:'Unbounded',sans-serif}
 
+  /* Профіль — звичайні картки займали забагато місця одразу на екрані,
+     тож усе, що не є першочерговою дією, лежить згорнутим у details-блок
+     і "висувається" по тапу, без жодного JS. */
+  .collapsecard{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:16px;margin-bottom:10px;overflow:hidden}
+  .collapsecard summary{list-style:none;cursor:pointer;padding:14px;display:flex;align-items:center;justify-content:space-between;font-family:'Unbounded',sans-serif;font-size:.78rem;-webkit-tap-highlight-color:transparent}
+  .collapsecard summary::-webkit-details-marker{display:none}
+  .collapsecard summary::after{content:'';width:8px;height:8px;border-right:2px solid var(--dim);border-bottom:2px solid var(--dim);transform:rotate(45deg);transition:transform .2s;flex:none;margin-left:10px}
+  .collapsecard[open] summary::after{transform:rotate(-135deg)}
+  .collapsecard .collapsebody{padding:0 14px 14px}
+
   /* SETTINGS TOGGLES */
   .setrow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.8rem}
   .setrow:last-child{border-bottom:none}
@@ -358,6 +368,7 @@
   .lbrow .amt{font-family:'Unbounded',sans-serif;color:var(--gold);font-size:.78rem}
   .lbavatar-wrap{position:relative;width:26px;height:26px;flex:0 0 26px;border-radius:50%}
   .lbavatar-wrap .avatar{position:relative;z-index:1;width:26px;height:26px;box-shadow:none}
+  .lbavatar-wrap .avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   .lbavatar-wrap.spin-ring::before{content:'';position:absolute;inset:-3px;border-radius:50%;background:conic-gradient(from 0deg,var(--pink),var(--cyan),var(--gold),var(--pink));animation:lbspin 2.4s linear infinite;z-index:0}
   @keyframes lbspin{to{transform:rotate(360deg)}}
 
@@ -667,21 +678,6 @@
           </div>
         </div>
 
-        <div class="hcard" style="margin-bottom:18px">
-          <h4>✏️ Нікнейм</h4>
-          <p id="nickHint">Як тебе бачать інші в топі та профілі</p>
-          <div class="promorow">
-            <input id="nickInput" placeholder="Твій нік" maxlength="18" autocomplete="off">
-            <button id="nickBtn">Зберегти</button>
-          </div>
-        </div>
-
-        <div class="hcard" style="margin-bottom:18px">
-          <h4>🎨 Тема оформлення</h4>
-          <p>Безкоштовно — обери й одразу застосується</p>
-          <div class="shopgrid" id="themeGrid"></div>
-        </div>
-
         <div class="hrow2">
           <div class="hcard bonus">
             <h4>🎁 Щоденний бонус</h4>
@@ -695,38 +691,53 @@
           </div>
         </div>
 
-        <div class="hcard" style="margin-bottom:18px">
-          <h4>🎟 Промокод</h4>
-          <p>Введи код і забери монети</p>
-          <div class="promorow">
-            <input id="promoInput" placeholder="КОД" autocapitalize="characters" autocomplete="off">
-            <button id="promoBtn">Ввести</button>
+        <details class="collapsecard">
+          <summary>✏️ Нік і тема оформлення</summary>
+          <div class="collapsebody">
+            <p id="nickHint" style="margin-bottom:8px">Як тебе бачать інші в топі та профілі</p>
+            <div class="promorow" style="margin-bottom:16px">
+              <input id="nickInput" placeholder="Твій нік" maxlength="18" autocomplete="off">
+              <button id="nickBtn">Зберегти</button>
+            </div>
+            <p style="color:var(--dim);font-size:.72rem;margin-bottom:10px">Тема — безкоштовно, застосовується одразу</p>
+            <div class="shopgrid" id="themeGrid"></div>
           </div>
-        </div>
+        </details>
 
-        <div class="hcard" style="margin-bottom:18px">
-          <h4>💸 Переказ гравцю</h4>
-          <p id="transferHint">Вкажи @username або ID і суму</p>
-          <div class="promorow" style="margin-bottom:8px">
-            <input id="transferTarget" placeholder="@username або ID" autocomplete="off">
+        <details class="collapsecard">
+          <summary>🎟 Промокод і переказ</summary>
+          <div class="collapsebody">
+            <p style="margin-bottom:8px">Введи код і забери монети</p>
+            <div class="promorow" style="margin-bottom:16px">
+              <input id="promoInput" placeholder="КОД" autocapitalize="characters" autocomplete="off">
+              <button id="promoBtn">Ввести</button>
+            </div>
+            <p id="transferHint" style="margin-bottom:8px">Вкажи @username або ID і суму</p>
+            <div class="promorow" style="margin-bottom:8px">
+              <input id="transferTarget" placeholder="@username або ID" autocomplete="off">
+            </div>
+            <div class="promorow">
+              <input id="transferAmount" placeholder="Сума" inputmode="numeric" autocomplete="off">
+              <button id="transferBtn">Переказати</button>
+            </div>
           </div>
-          <div class="promorow">
-            <input id="transferAmount" placeholder="Сума" inputmode="numeric" autocomplete="off">
-            <button id="transferBtn">Переказати</button>
+        </details>
+
+        <details class="collapsecard">
+          <summary>⚙️ Налаштування</summary>
+          <div class="collapsebody">
+            <div class="setrow"><span>🔊 Звук</span><button class="toggle" id="toggleSound" data-on="1"><i></i></button></div>
+            <div class="setrow"><span>📳 Вібрація</span><button class="toggle" id="toggleVibro" data-on="1"><i></i></button></div>
           </div>
-        </div>
+        </details>
 
-        <div class="hcard" style="margin-bottom:18px">
-          <h4>⚙️ Налаштування</h4>
-          <div class="setrow"><span>🔊 Звук</span><button class="toggle" id="toggleSound" data-on="1"><i></i></button></div>
-          <div class="setrow"><span>📳 Вібрація</span><button class="toggle" id="toggleVibro" data-on="1"><i></i></button></div>
-        </div>
-
-        <div class="hcard" id="adminCard" style="margin-bottom:18px;display:none">
-          <h4>👑 Адмін-панель</h4>
-          <p>Статистика, баланс гравців, розсилка</p>
-          <button class="hbtn" id="openAdminBtn" data-goto="admin">Відкрити</button>
-        </div>
+        <details class="collapsecard" id="adminCard" style="display:none">
+          <summary>👑 Адмін-панель</summary>
+          <div class="collapsebody">
+            <p style="margin-bottom:10px">Статистика, баланс гравців, розсилка</p>
+            <button class="hbtn" id="openAdminBtn" data-goto="admin">Відкрити</button>
+          </div>
+        </details>
 
         <button class="playbtn" id="backToBot">Повернутись у чат</button>
       </div>
@@ -1334,10 +1345,13 @@
       homeLb.innerHTML = r.items.map(function(it, i){
         var rc = i===0?'r1':i===1?'r2':i===2?'r3':'';
         var initial = esc((it.name||'?').replace('@','').charAt(0).toUpperCase() || '?');
-        // Telegram WebApp дає фото лише ТОГО, хто зараз дивиться топ —
-        // фото інших гравців боту недоступне без зайвих запитів до API,
-        // тож для свого рядка показуємо справжнє фото, для решти — ініціал.
-        var inner = (it.you && myPhoto) ? '<img src="'+myPhoto+'" alt="">' : '<span style="font-size:.62rem">'+initial+'</span>';
+        // Для себе беремо фото напряму з Telegram WebApp (швидше, без
+        // запиту на сервер), для решти — через власний проксі-ендпоінт
+        // /api/avatar/<id> (сервер ходить у Telegram з токеном бота, якого
+        // не можна світити на клієнті). Якщо фото немає або не завантажилось
+        // — під картинкою завжди лежить ініціал, onerror просто ховає <img>.
+        var photoSrc = (it.you && myPhoto) ? myPhoto : (API_BASE + '/api/avatar/' + it.user_id);
+        var inner = '<span style="font-size:.62rem">'+initial+'</span><img src="'+photoSrc+'" alt="" onerror="this.style.display=\'none\'">';
         var avatar = '<div class="lbavatar-wrap'+(it.border?' spin-ring':'')+'"><div class="avatar small'+(it.border?' b-'+it.border:'')+'">'+inner+'</div></div>';
         return '<div class="lbrow '+rc+(it.you?' me':'')+'"><span class="rank">'+(i+1)+'</span>'+avatar+'<span class="name">'+(it.you?'Ти':esc(it.name))+'</span><span class="amt">'+it.balance+'</span></div>';
       }).join('');
