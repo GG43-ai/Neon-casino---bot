@@ -50,7 +50,7 @@ BOT_LOOP = None
 BOT_APP = None
 
 import threading
-from flask import Flask, request, send_from_directory
+from flask import Flask, request, send_from_directory, Response
 
 # --- 1. Создаем веб-сервер для Render ---
 app = Flask(__name__)
@@ -444,6 +444,40 @@ def api_leaderboard():
         for r in rows
     ]
     return {"items": items}
+
+
+# Telegram не дає посилання на чужі фото профілю без бот-токена в URL, а
+# світити токен у клієнті не можна — тому фото проксимо через себе: сервер
+# ходить у Telegram з токеном, а фронтенду віддає вже готові байти
+# картинки. Невеликий кеш у пам'яті, щоб не бити Telegram API на кожен
+# рендер топу гравців.
+AVATAR_CACHE = {}
+AVATAR_CACHE_TTL = 600
+
+
+@app.route("/api/avatar/<int:user_id>", methods=["GET"])
+def api_avatar(user_id):
+    now = time.time()
+    cached = AVATAR_CACHE.get(user_id)
+    if cached and now - cached[0] < AVATAR_CACHE_TTL:
+        if cached[1] is None:
+            return "", 404
+        return Response(cached[1], mimetype="image/jpeg", headers={"Cache-Control": "public, max-age=600"})
+
+    data = None
+    try:
+        photos = call_async(BOT_APP.bot.get_user_profile_photos(user_id, limit=1))
+        if photos and photos.photos:
+            file_id = photos.photos[0][-1].file_id
+            tg_file = call_async(BOT_APP.bot.get_file(file_id))
+            data = bytes(call_async(tg_file.download_as_bytearray()))
+    except Exception:
+        data = None
+
+    AVATAR_CACHE[user_id] = (now, data)
+    if data is None:
+        return "", 404
+    return Response(data, mimetype="image/jpeg", headers={"Cache-Control": "public, max-age=600"})
 
 
 @app.route("/api/promo/redeem", methods=["POST"])
