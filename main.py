@@ -1031,10 +1031,23 @@ def api_crash_status():
 
 @app.route("/api/crash/cashout", methods=["POST"])
 def api_crash_cashout():
+    """claimed_mult — множник, який гравець РЕАЛЬНО бачив на екрані в
+    момент натискання "Забрати". Поки запит летить мережею до сервера,
+    реальний (серверний) час продовжує йти, тож current_mult тут завжди
+    трохи БІЛЬШИЙ за те, що гравець устиг побачити — якби платили за
+    current_mult, виходило б "показало 1.23, а зарахувало 1.34". Платимо
+    за min(claimed_mult, current_mult): ніколи не більше реально
+    досягнутого (інакше нечесний клієнт міг би просто надіслати
+    величезне число), і ніколи не більше того, що гравець бачив —
+    тобто рівно те число, яке було на екрані в момент кліку."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
     uid, _ = auth
+    body = request.get_json(silent=True) or {}
+    claimed_mult = body.get("claimed_mult")
+    if not isinstance(claimed_mult, (int, float)) or isinstance(claimed_mult, bool):
+        claimed_mult = None
 
     with WEB_GAME_LOCK:
         game = web_crash_games.pop(uid, None)
@@ -1049,10 +1062,14 @@ def api_crash_cashout():
 
         call_async(clear_active_game(uid))
 
-    reward = int(game["bet"] * current_mult)
+    pay_mult = current_mult
+    if claimed_mult is not None:
+        pay_mult = max(1.0, min(float(claimed_mult), current_mult))
+
+    reward = int(game["bet"] * pay_mult)
     call_async(add_balance(uid, reward))
     balance = call_async(get_user(uid))[2]
-    return {"reward": reward, "mult": current_mult, "balance": balance}
+    return {"reward": reward, "mult": pay_mult, "balance": balance}
 
 
 # Настоящие красные числа европейской рулетки (чёрные — все остальные 1-36)
