@@ -1518,8 +1518,13 @@
       if (!flying) return;
       clearInterval(timer); flying=false;
       if (liveMode){
+        // Фіксуємо число, яке гравець бачить на екрані ПРЯМО ЗАРАЗ, в момент
+        // кліку, — те саме, що весь час малював таймер вище. Сервер заплатить
+        // рівно за нього (не більше), навіть якщо поки запит летів мережею,
+        // реальний час на сервері пішов трохи далі вперед.
+        var shownMult = mult;
         try {
-          var r = await api('/api/crash/cashout', {});
+          var r = await api('/api/crash/cashout', {claimed_mult: shownMult});
           if (r.crashed){ crash(r.crash_point); return; }
           setBalance(r.balance);
           crashMsg.textContent='Забрано x'+r.mult.toFixed(2)+' \u00b7 +'+r.reward+' монет';
@@ -2114,6 +2119,27 @@
     var spinning = false, spinTotal = 0;
     var bar = makeBetBar(document.getElementById('upgradeBetbar'), 100, play, 'Апгрейднути');
 
+    // Поки чекаємо відповідь сервера, стрілка не повинна стояти на місці —
+    // крутимо її безперервно (2 оберти/сек) прямо від поточного кута, а
+    // щойно прийде результат — зупиняємо цей цикл і продовжуємо (без стрибка,
+    // з того самого візуального кута) точною анімацією до r.roll*360.
+    var liveSpinRAF = null, liveSpinAngle = 0;
+    function startLiveSpin(){
+      var startAngle = ((spinTotal % 360) + 360) % 360;
+      var t0 = performance.now();
+      arrow.style.transition = 'none';
+      function frame(now){
+        var el = (now - t0) / 1000;
+        liveSpinAngle = startAngle + el * 720;
+        arrow.style.transform = 'rotate(' + liveSpinAngle + 'deg)';
+        liveSpinRAF = requestAnimationFrame(frame);
+      }
+      liveSpinRAF = requestAnimationFrame(frame);
+    }
+    function stopLiveSpin(){
+      if (liveSpinRAF){ cancelAnimationFrame(liveSpinRAF); liveSpinRAF = null; }
+    }
+
     function multFromSlider(){ return slider.value/100; }
     function chanceFor(mult){ return Math.max(0.02, Math.min(0.95, (1/mult)*0.95)); }
     function renderWheel(){
@@ -2137,9 +2163,11 @@
                      // міг ще не підхопити періодичний рендер (раз на 400мс)
       spinning = true; bar.setPlaying(true,'Крутиться...'); msg.textContent = 'Крутиться...';
       slider.disabled = true;
+      startLiveSpin();
       var r;
       try { r = await api('/api/upgrade/play', {amount:amount, multiplier:mult}); }
       catch(e){
+        stopLiveSpin();
         spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
         msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка';
         return;
@@ -2148,11 +2176,12 @@
       // Стрілка МУСИТЬ зупинитись рівно на r.roll*360° (за модулем 360) —
       // саме це число сервер використав, щоб вирішити win/lose, тож будь-яке
       // відхилення тут і є причиною "влучило в сіре, а написало виграш".
-      // Щоб гарантувати це на 100% (а не накопичувати кути від спіна до
-      // спіна, де легко помилитись), спершу БЕЗ анімації ставимо стрілку
-      // точно на її поточну видиму позицію (кут за модулем 360), а потім
-      // анімуємо вперед на кілька повних обертів + точний кут результату.
-      var current = ((spinTotal % 360) + 360) % 360;
+      // Зупиняємо безперервний спін-цикл і стартуємо точну анімацію ПРЯМО
+      // з того кута, де стрілка візуально опинилась в цю мить (без стрибка
+      // назад), а потім крутимо ще кілька повних обертів + точний кут
+      // результату — так гарантується і плавність, і 100% точність.
+      stopLiveSpin();
+      var current = ((liveSpinAngle % 360) + 360) % 360;
       arrow.style.transition = 'none';
       arrow.style.transform = 'rotate('+current+'deg)';
       void arrow.offsetWidth; // форсуємо reflow, щоб reset застосувався без анімації
