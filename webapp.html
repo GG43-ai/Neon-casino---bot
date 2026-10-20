@@ -1517,6 +1517,15 @@
       flash.classList.remove('hit'); void flash.offsetWidth; flash.classList.add('hit');
       bar.setCashMode(false,'Старт'); bar.setPlaying(false,'Старт'); bar.playBtn.onclick = function(){ startCrash(bar.amount()); };
       haptic('fail');
+      if (liveMode){
+        // Програна гра досі лежить у сервера як "активна", поки хтось явно
+        // не підтвердить її завершення — інакше наступна ставка одразу
+        // впирається в "Активна гра вже є" (і так аж до 30-секундного
+        // самоочищення). /api/crash/cashout бачить, що crash_point уже
+        // пройдено, і сам коректно закриває гру без жодної виплати — саме
+        // тому можна сміливо смикнути його тут і ігнорувати відповідь.
+        api('/api/crash/cashout', {}).catch(function(){});
+      }
     }
 
     async function cashout(){
@@ -2201,37 +2210,36 @@
       // Стрілка МУСИТЬ зупинитись рівно на r.roll*360° (за модулем 360) —
       // саме це число сервер використав, щоб вирішити win/lose, тож будь-яке
       // відхилення тут і є причиною "влучило в сіре, а написало виграш".
-      // Зупиняємо безперервний спін-цикл і стартуємо точну анімацію ПРЯМО
-      // з того кута, де стрілка візуально опинилась в цю мить (без стрибка
-      // назад), а потім крутимо ще кілька повних обертів + точний кут
-      // результату — так гарантується і плавність, і 100% точність.
+      // Переходимо з безперервного спіна ПРЯМО в анімацію гальмування, не
+      // зупиняючись і не "стрибаючи" на новій швидкості: фінальний рух
+      // стартує з тієї самої швидкості (720°/с), що й щойно крутилась
+      // стрілка, і рівномірно гальмує до нуля — суцільний один рух від
+      // кліку до зупинки, без відчутного ривка "трохи — потім сильніше".
       stopLiveSpin();
       var current = ((liveSpinAngle % 360) + 360) % 360;
-      arrow.style.transition = 'none';
-      arrow.style.transform = 'rotate('+current+'deg)';
-      void arrow.offsetWidth; // форсуємо reflow, щоб reset застосувався без анімації
-      arrow.style.transition = '';
-      spinTotal = current + 360*4 + r.roll*360;
-      arrow.style.transform = 'rotate('+spinTotal+'deg)';
-      // Результат показуємо ТІЛЬКИ коли стрілка візуально й справді доїхала
-      // до кінця (подія transitionend), а не за фіксованим таймером — на
-      // слабшому пристрої чи при "зависанні" кадру setTimeout(2500) міг
-      // спрацювати РАНІШЕ, ніж стрілка фізично долетіла до свого сектора,
-      // тож глядач бачив її ще в сірому, а напис уже казав "влучило". Так
-      // напис і реальна кінцева позиція стрілки завжди збігаються.
+      var v0 = 720; // deg/sec — швидкість безперервного спіна вище
+      var dist = 360*2 + r.roll*360; // рівно стільки лишилось доїхати до кута результату
+      var target = current + dist;
+      var duration = (2*dist/v0)*1000; // рівномірне гальмування з v0 до 0: dist=v0*T/2 ⇒ T=2*dist/v0
+      spinTotal = target;
+      var t0 = performance.now();
       var revealed = false;
+      function tick(now){
+        var t = Math.min(1, (now-t0)/duration);
+        var angle = current + dist*(2*t - t*t); // рівномірне сповільнення, без стрибків швидкості
+        arrow.style.transform = 'rotate('+angle+'deg)';
+        if (t < 1){ requestAnimationFrame(tick); }
+        else { arrow.style.transform = 'rotate('+target+'deg)'; reveal(); }
+      }
       function reveal(){
         if (revealed) return;
         revealed = true;
-        arrow.removeEventListener('transitionend', onEnd);
         spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
         setBalance(r.balance);
         msg.textContent = r.win ? ('🎉 Влучило! +'+r.reward+' монет') : 'Не влучило — сірий сектор';
         haptic(r.win?'ok':'fail');
       }
-      function onEnd(e){ if (e.propertyName === 'transform') reveal(); }
-      arrow.addEventListener('transitionend', onEnd);
-      setTimeout(reveal, 3200); // страхувальний запасний варіант, якщо transitionend не прийде
+      requestAnimationFrame(tick);
     }
   })();
 
