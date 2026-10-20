@@ -932,26 +932,31 @@
     else tg.HapticFeedback.impactOccurred('light');
   }
 
-  /* маленька приємна дрібниця: іскри біля балансу при будь-якому виграші */
+  /* справжня конфеті-зливка на весь екран при будь-якому виграші —
+     кольорові прямокутнички падають згори, обертаючись, і згасають */
   function burstConfetti(){
-    var origin = document.querySelector('.chips');
-    if (!origin) return;
-    var rect = origin.getBoundingClientRect();
-    var bits = ['\u2728','\ud83d\udcb0','\u2b50','\ud83c\udf89'];
-    for (var i=0;i<7;i++){
+    var colors = ['var(--pink)','var(--cyan)','var(--gold)','#ffffff','var(--green)'];
+    var count = 36;
+    for (var i=0;i<count;i++){
       (function(){
-        var p = document.createElement('span');
-        p.textContent = bits[Math.floor(Math.random()*bits.length)];
-        p.style.cssText = 'position:fixed;left:'+(rect.left+rect.width/2)+'px;top:'+(rect.top+rect.height/2)+'px;'+
-          'font-size:'+(13+Math.random()*9)+'px;pointer-events:none;z-index:999;'+
-          'transition:transform .9s cubic-bezier(.2,.7,.3,1),opacity .9s ease;opacity:1;transform:translate(-50%,-50%)';
+        var p = document.createElement('div');
+        var startX = Math.random()*100;
+        var size = 6+Math.random()*6;
+        var color = colors[Math.floor(Math.random()*colors.length)];
+        var rotateStart = Math.random()*360;
+        var duration = 1500+Math.random()*900;
+        p.style.cssText = 'position:fixed;top:-14px;left:'+startX+'vw;width:'+size+'px;height:'+(size*0.45)+'px;'+
+          'background:'+color+';opacity:1;pointer-events:none;z-index:999;border-radius:1px;'+
+          'transform:translateY(0) rotate('+rotateStart+'deg);'+
+          'transition:transform '+duration+'ms cubic-bezier(.36,.66,.3,1),opacity 260ms ease '+(duration-260)+'ms';
         document.body.appendChild(p);
         requestAnimationFrame(function(){
-          var dx = (Math.random()*2-1)*64, dy = -36-Math.random()*56;
-          p.style.transform = 'translate(calc(-50% + '+dx+'px),calc(-50% + '+dy+'px)) rotate('+(Math.random()*360)+'deg) scale(.5)';
+          var endY = window.innerHeight + 40;
+          var drift = (Math.random()*2-1)*70;
+          p.style.transform = 'translate('+drift+'px,'+endY+'px) rotate('+(rotateStart+360+Math.random()*360)+'deg)';
           p.style.opacity = '0';
         });
-        setTimeout(function(){ p.remove(); }, 950);
+        setTimeout(function(){ p.remove(); }, duration+100);
       })();
     }
   }
@@ -1517,6 +1522,11 @@
     async function cashout(){
       if (!flying) return;
       clearInterval(timer); flying=false;
+      // Миттєвий відгук на клік: гравець мусить одразу побачити, що натискання
+      // спрацювало, а не чекати мовчки, поки летить запит на сервер (особливо
+      // якщо хостинг прокидається після сну) — інакше здається, що кнопка
+      // "не реагує", навіть коли насправді все йде як слід.
+      bar.setPlaying(true, 'Забираю...');
       if (liveMode){
         // Фіксуємо число, яке гравець бачить на екрані ПРЯМО ЗАРАЗ, в момент
         // кліку, — те саме, що весь час малював таймер вище. Сервер заплатить
@@ -2061,11 +2071,18 @@
     function isEquipped(it){ return shopEquipped[it.type] === it.id; }
     function themeSwatch(id){
       var map = {theme_gold:'#ffc342',theme_ice:'#7dd3fc',theme_sunset:'#fb923c',theme_ocean:'#0ea5e9',theme_cyber:'#a855f7',theme_emerald:'#10b981',theme_crimson:'#ef4444',theme_violet:'#8b5cf6',theme_matrix:'#22c55e',theme_royal:'#6366f1'};
-      return map[id] || '#888';
+      return map[id] || '#ff2d78';
     }
 
     function renderInto(grid, type){
       var items = shopItems.filter(function(i){ return i.type===type; });
+      // "Стандартна" — не косметика з крамниці, а завжди доступний пункт
+      // повернення до вихідного вигляду застосунку (equipped_theme='').
+      // Без нього, обравши будь-яку іншу тему, повернутись назад до
+      // оригінальних кольорів можна було лише вручну редагуючи дані.
+      if (type === 'theme'){
+        items = [{id:'', type:'theme', name:'Стандартна', price:0, owned:true}].concat(items);
+      }
       grid.innerHTML = items.map(cardHtml).join('');
       grid.querySelectorAll('button[data-act]').forEach(function(btn){
         btn.addEventListener('click', function(){ onItemAction(btn.dataset.id, btn.dataset.act); });
@@ -2077,6 +2094,14 @@
         if (act === 'buy'){
           var r = await api('/api/shop/buy', {item_id:id});
           setBalance(r.balance);
+          haptic('ok');
+        } else if (id === ''){
+          // "Стандартна" тема — синтетичний пункт, якого нема в каталозі з
+          // сервера (він не косметика для покупки, а завжди доступне
+          // повернення до вихідного вигляду).
+          var r2b = await api('/api/shop/equip', {item_id:'', slot:'theme'});
+          shopEquipped.theme = r2b.item_id;
+          if (meData){ meData.equipped_theme = r2b.item_id; applyCosmetics(); }
           haptic('ok');
         } else {
           var it = shopItems.find(function(x){ return x.id===id; });
@@ -2188,12 +2213,25 @@
       arrow.style.transition = '';
       spinTotal = current + 360*4 + r.roll*360;
       arrow.style.transform = 'rotate('+spinTotal+'deg)';
-      setTimeout(function(){
+      // Результат показуємо ТІЛЬКИ коли стрілка візуально й справді доїхала
+      // до кінця (подія transitionend), а не за фіксованим таймером — на
+      // слабшому пристрої чи при "зависанні" кадру setTimeout(2500) міг
+      // спрацювати РАНІШЕ, ніж стрілка фізично долетіла до свого сектора,
+      // тож глядач бачив її ще в сірому, а напис уже казав "влучило". Так
+      // напис і реальна кінцева позиція стрілки завжди збігаються.
+      var revealed = false;
+      function reveal(){
+        if (revealed) return;
+        revealed = true;
+        arrow.removeEventListener('transitionend', onEnd);
         spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
         setBalance(r.balance);
         msg.textContent = r.win ? ('🎉 Влучило! +'+r.reward+' монет') : 'Не влучило — сірий сектор';
         haptic(r.win?'ok':'fail');
-      }, 2500);
+      }
+      function onEnd(e){ if (e.propertyName === 'transform') reveal(); }
+      arrow.addEventListener('transitionend', onEnd);
+      setTimeout(reveal, 3200); // страхувальний запасний варіант, якщо transitionend не прийде
     }
   })();
 
