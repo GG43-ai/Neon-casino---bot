@@ -1477,7 +1477,13 @@
         var el = (Date.now()-t0)/1000;
         mult = Math.round((1+el*0.12)*100)/100;
         crashMultEl.textContent = 'x'+mult.toFixed(2);
-        var x = Math.min(300, el*12), y = Math.max(10, 190-(mult-1)*140);
+        // Корінь замість прямої лінії: невеликі множники (де тепер і падає
+        // більшість раундів, 1.01-1.21x) дають помітний стрибок лінії вгору
+        // одразу ж, а не ледь помітний нахил — x1.5 вже виглядає як солідний
+        // підйом, хоча саме число mult (а отже й виплата) не змінюється
+        // жодним чином, це суто візуальний масштаб графіка.
+        var riseProgress = Math.min(1, Math.sqrt(Math.max(0, mult-1)/2));
+        var x = Math.min(300, el*12), y = 190 - riseProgress*180;
         pts.push([x,y]);
         line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
         dot.setAttribute('cx',x); dot.setAttribute('cy',y);
