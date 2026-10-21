@@ -546,7 +546,11 @@
           <button class="colorbtn cb-red" data-color="red"><span class="dot"></span>Червоне · x2</button>
           <button class="colorbtn cb-black" data-color="black"><span class="dot"></span>Чорне · x2</button>
         </div>
-        <div class="msg" id="rouletteMsg">Обери число (x36) або колір (x2)</div>
+        <div class="colorpick" id="parityPick">
+          <button class="colorbtn" data-parity="even">Парне · x2</button>
+          <button class="colorbtn" data-parity="odd">Непарне · x2</button>
+        </div>
+        <div class="msg" id="rouletteMsg">Обери число (x36), колір (x2) або парність (x2)</div>
       </div>
       <div class="betbar" id="rouletteBetbar"></div>
     </section>
@@ -1675,24 +1679,40 @@
       numGrid.appendChild(b);
     }
 
-    var numChoice = null, colorChoice = null, spinning=false;
+    var numChoice = null, colorChoice = null, parityChoice = null, spinning=false;
     var bar = makeBetBar(document.getElementById('rouletteBetbar'), 100, play, 'Крутити');
+
+    function clearOtherPicks(except){
+      if (except !== 'num') numGrid.querySelectorAll('.numbtn').forEach(function(x){ x.classList.remove('sel'); });
+      if (except !== 'color') document.querySelectorAll('#colorPick [data-color]').forEach(function(x){ x.classList.remove('sel'); });
+      if (except !== 'parity') document.querySelectorAll('#parityPick [data-parity]').forEach(function(x){ x.classList.remove('sel'); });
+    }
 
     numGrid.addEventListener('click', function(e){
       var b = e.target.closest('.numbtn'); if (!b || spinning) return;
-      numChoice = parseInt(b.dataset.num,10); colorChoice = null;
-      numGrid.querySelectorAll('.numbtn').forEach(function(x){ x.classList.toggle('sel', x===b); });
-      document.querySelectorAll('#colorPick [data-color]').forEach(function(x){ x.classList.remove('sel'); });
+      numChoice = parseInt(b.dataset.num,10); colorChoice = null; parityChoice = null;
+      clearOtherPicks('num');
+      b.classList.add('sel');
       msg.textContent = 'Число '+numChoice+' · x36';
       haptic();
     });
     document.querySelectorAll('#colorPick [data-color]').forEach(function(b){
       b.addEventListener('click', function(){
         if (spinning) return;
-        colorChoice = b.dataset.color; numChoice = null;
-        document.querySelectorAll('#colorPick [data-color]').forEach(function(x){ x.classList.toggle('sel', x===b); });
-        numGrid.querySelectorAll('.numbtn').forEach(function(x){ x.classList.remove('sel'); });
+        colorChoice = b.dataset.color; numChoice = null; parityChoice = null;
+        clearOtherPicks('color');
+        b.classList.add('sel');
         msg.textContent = (colorChoice==='red'?'Червоне':'Чорне')+' · x2';
+        haptic();
+      });
+    });
+    document.querySelectorAll('#parityPick [data-parity]').forEach(function(b){
+      b.addEventListener('click', function(){
+        if (spinning) return;
+        parityChoice = b.dataset.parity; numChoice = null; colorChoice = null;
+        clearOtherPicks('parity');
+        b.classList.add('sel');
+        msg.textContent = (parityChoice==='even'?'Парне':'Непарне')+' · x2';
         haptic();
       });
     });
@@ -1709,14 +1729,14 @@
 
     async function play(amount){
       if (spinning) return;
-      var choice = numChoice !== null ? numChoice : colorChoice;
-      if (choice === null){ msg.textContent = 'Обери число або колір'; return; }
+      var choice = numChoice !== null ? numChoice : (colorChoice !== null ? colorChoice : parityChoice);
+      if (choice === null){ msg.textContent = 'Обери число, колір або парність'; return; }
       spinning = true; bar.setPlaying(true,'Крутиться...'); resultPill.classList.remove('show');
       msg.textContent = 'Крутиться...';
 
       var number, color, reward, partage=false, newBalance;
       try {
-        var mode = numChoice !== null ? 'number' : 'color';
+        var mode = numChoice !== null ? 'number' : (colorChoice !== null ? 'color' : 'parity');
         var r = await api('/api/roulette/play', {amount:amount, mode:mode, choice:choice, variant:'french'});
         number=r.number; color=r.color; reward=r.reward; partage=r.partage; newBalance=r.balance;
       } catch(e){
