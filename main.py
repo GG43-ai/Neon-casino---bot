@@ -1099,9 +1099,11 @@ def api_roulette_play():
     choice = body.get("choice")
     variant = body.get("variant", "european")
 
-    if amount is None or mode not in ("color", "number"):
+    if amount is None or mode not in ("color", "number", "parity"):
         return {"error": "bad_request"}, 400
     if mode == "color" and choice not in ("red", "black"):
+        return {"error": "bad_request"}, 400
+    if mode == "parity" and choice not in ("even", "odd"):
         return {"error": "bad_request"}, 400
     if mode == "number" and (not isinstance(choice, int) or isinstance(choice, bool) or not (0 <= choice <= 36)):
         return {"error": "bad_request"}, 400
@@ -1117,6 +1119,15 @@ def api_roulette_play():
     if mode == "number":
         if choice == number:
             reward = amount * 36
+    elif mode == "parity":
+        # 0 не парне й не непарне в ставці на Even/Odd — як і колір, програє
+        # в європейському варіанті й повертає половину ставки у французькому.
+        if number == 0:
+            if variant == "french":
+                reward = amount // 2
+                partage = True
+        elif choice == ("even" if number % 2 == 0 else "odd"):
+            reward = amount * 2
     else:
         if number == 0:
             if variant == "french":
