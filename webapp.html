@@ -367,7 +367,7 @@
   .lbrow.me{border-color:var(--pink)}
   .lbrow .amt{font-family:'Unbounded',sans-serif;color:var(--gold);font-size:.78rem}
   .lbavatar-wrap{position:relative;width:26px;height:26px;flex:0 0 26px;border-radius:50%}
-  .lbavatar-wrap .avatar{position:relative;z-index:1;width:26px;height:26px;box-shadow:none}
+  .lbavatar-wrap .avatar{position:relative;z-index:1;width:26px;height:26px}
   .lbavatar-wrap .avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   .lbavatar-wrap.spin-ring::before{content:'';position:absolute;inset:-3px;border-radius:50%;background:conic-gradient(from 0deg,var(--pink),var(--cyan),var(--gold),var(--pink));animation:lbspin 2.4s linear infinite;z-index:0}
   @keyframes lbspin{to{transform:rotate(360deg)}}
@@ -1361,7 +1361,7 @@
         // — під картинкою завжди лежить ініціал, onerror просто ховає <img>.
         var photoSrc = (it.you && myPhoto) ? myPhoto : (API_BASE + '/api/avatar/' + it.user_id);
         var inner = '<span style="font-size:.62rem">'+initial+'</span><img src="'+photoSrc+'" alt="" onerror="this.style.display=\'none\'">';
-        var avatar = '<div class="lbavatar-wrap'+(it.border?' spin-ring':'')+'"><div class="avatar small'+(it.border?' b-'+it.border:'')+'">'+inner+'</div></div>';
+        var avatar = '<div class="lbavatar-wrap'+(i<3 && it.border?' spin-ring':'')+'"><div class="avatar small'+(it.border?' b-'+it.border:'')+'">'+inner+'</div></div>';
         return '<div class="lbrow '+rc+(it.you?' me':'')+'"><span class="rank">'+(i+1)+'</span>'+avatar+'<span class="name">'+(it.you?'Ти':esc(it.name))+'</span><span class="amt">'+it.balance+'</span></div>';
       }).join('');
     } catch(e){ homeLb.innerHTML = '<div class="msg">Не вдалось завантажити</div>'; }
