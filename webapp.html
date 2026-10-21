@@ -1475,9 +1475,9 @@
       var tick = 0, checking = false;
       timer = setInterval(function(){
         var el = (Date.now()-t0)/1000;
-        mult = Math.round((1+el*0.22)*100)/100;
+        mult = Math.round((1+el*0.12)*100)/100;
         crashMultEl.textContent = 'x'+mult.toFixed(2);
-        var x = Math.min(300, el*22), y = Math.max(10, 190-(mult-1)*140);
+        var x = Math.min(300, el*12), y = Math.max(10, 190-(mult-1)*140);
         pts.push([x,y]);
         line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
         dot.setAttribute('cx',x); dot.setAttribute('cy',y);
@@ -1500,7 +1500,7 @@
             checking = false;
             if (r.crashed){ crash(r.crash_point); return; }
             if (typeof r.mult === 'number'){
-              var serverElapsed = (r.mult - 1) / 0.22;
+              var serverElapsed = (r.mult - 1) / 0.12;
               t0 = Date.now() - serverElapsed*1000;
               mult = r.mult;
             }
@@ -2120,7 +2120,14 @@
           if (meData){ meData['equipped_'+it.type] = r2.item_id; applyCosmetics(); }
           haptic('ok');
         }
-        await loadCatalog();
+        // Локальний стан (shopEquipped/meData) уже оновлено вище — малюємо
+        // сітку крамниці ("Екіпіровано") одразу з нього, не чекаючи мережі.
+        // loadCatalog() далі лише звіряється з сервером у фоні; якщо раптом
+        // прийде інша відповідь — перемалює сітку ще раз.
+        if (borderGrid) renderInto(borderGrid, 'border');
+        if (themeGrid) renderInto(themeGrid, 'theme');
+        refreshLeaderboard(); // щоб нова обводка одразу була видна і в топі
+        loadCatalog();
       } catch(e){
         haptic('fail');
       }
