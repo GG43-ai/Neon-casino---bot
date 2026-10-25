@@ -294,6 +294,23 @@ SHOP_ITEMS = {
     "theme_royal":   {"type": "theme", "name": "Королівська тема","price": 0},
 }
 
+# ---------- ЧЕРЕПАХА (ТИКАЛКА): енергія регенерує поступово з часом ----------
+MINER_ENERGY_REGEN_SECONDS = 180  # +1 енергія кожні 3 хв, незалежно від апгрейдів
+MINER_BASE_CAP = 50
+
+# Апгрейд "місткість енергії" — окремий трек від нагороди, кожен рівень
+# збільшує максимум енергії й коштує дедалі дорожче.
+MINER_CAP_LEVELS = [50, 65, 80, 100, 125, 155, 190, 230, 275, 325]
+MINER_CAP_COSTS  = [0,  300, 600, 1200, 2200, 3800, 6200, 9800, 15000, 22000]
+MINER_CAP_MAX_LEVEL = len(MINER_CAP_LEVELS) - 1
+
+# Апгрейд "нагорода" — окремий трек: скільки тиків треба на 1 виплату і
+# скільки монет вона дає. Рівень 0 — базові "10 тиків = 1 монета" з
+# запиту; останній рівень — "1 тик = 2 монети".
+MINER_REWARD_LEVELS = [(10, 1), (8, 1), (5, 1), (3, 1), (2, 1), (1, 1), (1, 2)]
+MINER_REWARD_COSTS  = [0,       400,    900,    1800,   3200,   5500,   9000]
+MINER_REWARD_MAX_LEVEL = len(MINER_REWARD_LEVELS) - 1
+
 # ---------- АПГРЕЙД: колесо з жовтим/сірим сектором ----------
 UPGRADE_MIN_MULT = 1.2
 UPGRADE_MAX_MULT = 20.0
@@ -731,6 +748,53 @@ def api_upgrade_play():
         "multiplier": multiplier,
         "balance": balance,
     }
+
+
+# ---------- ЧЕРЕПАХА: тапай, набирай тики, качай енергію й нагороду ----------
+@app.route("/api/miner/state", methods=["POST"])
+def api_miner_state():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    state = call_async(get_miner_state(uid))
+    balance = call_async(get_user(uid))[2]
+    return {**state, "balance": balance}
+
+
+@app.route("/api/miner/tap", methods=["POST"])
+def api_miner_tap():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    taps = (request.get_json(silent=True) or {}).get("taps")
+    if not isinstance(taps, int) or isinstance(taps, bool) or taps < 1 or taps > 100:
+        return {"error": "bad_request"}, 400
+    used, coins = call_async(miner_tap(uid, taps))
+    state = call_async(get_miner_state(uid))
+    balance = call_async(get_user(uid))[2]
+    return {"used": used, "coins_earned": coins, **state, "balance": balance}
+
+
+@app.route("/api/miner/upgrade", methods=["POST"])
+def api_miner_upgrade():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    track = (request.get_json(silent=True) or {}).get("track")
+    if track not in ("energy", "reward"):
+        return {"error": "bad_request"}, 400
+    cost, err = call_async(miner_upgrade(uid, track))
+    if err:
+        return {"error": err}, 400
+    state = call_async(get_miner_state(uid))
+    balance = call_async(get_user(uid))[2]
+    return {"ok": True, "cost": cost, **state, "balance": balance}
 
 
 # ---------- WEB ADMIN PANEL (тільки для ADMIN_USERNAME) ----------
@@ -1498,6 +1562,16 @@ CREATE TABLE IF NOT EXISTS pending_deposits (
     created_at BIGINT
 )
 """)
+_db_sync("""
+CREATE TABLE IF NOT EXISTS miner_state (
+    user_id BIGINT PRIMARY KEY,
+    energy INTEGER DEFAULT 50,
+    cap_level INTEGER DEFAULT 0,
+    reward_level INTEGER DEFAULT 0,
+    tick_progress INTEGER DEFAULT 0,
+    updated_at BIGINT DEFAULT 0
+)
+""")
 
 
 async def add_pending_deposit(uid, username, coins):
@@ -1729,6 +1803,92 @@ async def get_nickname(uid):
 
 async def set_nickname(uid, nickname):
     await db("UPDATE users SET nickname=? WHERE user_id=?", (nickname, uid))
+
+
+# ---------- ЧЕРЕПАХА (ТИКАЛКА): енергія + прогрес до монети ----------
+async def get_miner_state(uid):
+    """Повертає стан з урахуванням накопиченої за час відсутності енергії.
+    Регенерація — поступова (MINER_ENERGY_REGEN_SECONDS на 1 очко), а не
+    миттєве поповнення раз на добу, і рахується лише тут, при зверненні,
+    щоб не тримати фоновий таймер на кожного гравця."""
+    row = await db(
+        "SELECT energy, cap_level, reward_level, tick_progress, updated_at "
+        "FROM miner_state WHERE user_id=?", (uid,), "one",
+    )
+    now = int(time.time())
+    if not row:
+        await db(
+            "INSERT INTO miner_state (user_id, energy, cap_level, reward_level, tick_progress, updated_at) "
+            "VALUES (?, ?, 0, 0, 0, ?) ON CONFLICT (user_id) DO NOTHING",
+            (uid, MINER_BASE_CAP, now),
+        )
+        row = (MINER_BASE_CAP, 0, 0, 0, now)
+
+    energy, cap_level, reward_level, tick_progress, updated_at = row
+    cap_level = max(0, min(cap_level, MINER_CAP_MAX_LEVEL))
+    reward_level = max(0, min(reward_level, MINER_REWARD_MAX_LEVEL))
+    cap = MINER_CAP_LEVELS[cap_level]
+
+    elapsed = max(0, now - (updated_at or now))
+    gained = elapsed // MINER_ENERGY_REGEN_SECONDS
+    if gained and energy < cap:
+        energy = min(cap, energy + gained)
+        updated_at = now - (elapsed - gained * MINER_ENERGY_REGEN_SECONDS)
+        await db(
+            "UPDATE miner_state SET energy=?, updated_at=? WHERE user_id=?",
+            (energy, updated_at, uid),
+        )
+
+    ticks_needed, coins_per_payout = MINER_REWARD_LEVELS[reward_level]
+    next_regen_in = None if energy >= cap else (MINER_ENERGY_REGEN_SECONDS - (now - updated_at))
+    return {
+        "energy": energy, "cap": cap, "cap_level": cap_level,
+        "reward_level": reward_level, "tick_progress": tick_progress,
+        "ticks_needed": ticks_needed, "coins_per_payout": coins_per_payout,
+        "next_regen_in": next_regen_in,
+        "cap_next_cost": MINER_CAP_COSTS[cap_level + 1] if cap_level < MINER_CAP_MAX_LEVEL else None,
+        "cap_max": MINER_CAP_MAX_LEVEL,
+        "reward_next_cost": MINER_REWARD_COSTS[reward_level + 1] if reward_level < MINER_REWARD_MAX_LEVEL else None,
+        "reward_max": MINER_REWARD_MAX_LEVEL,
+    }
+
+
+async def miner_tap(uid, taps):
+    """Витрачає до `taps` енергії (не більше за наявну), рахує монети за
+    кожні ticks_needed тиків на поточному рівні нагороди."""
+    state = await get_miner_state(uid)
+    usable = max(0, min(taps, state["energy"]))
+    if usable <= 0:
+        return 0, 0
+    tick_progress = state["tick_progress"] + usable
+    payouts = tick_progress // state["ticks_needed"]
+    tick_progress = tick_progress % state["ticks_needed"]
+    coins_earned = payouts * state["coins_per_payout"]
+    new_energy = state["energy"] - usable
+    await db(
+        "UPDATE miner_state SET energy=?, tick_progress=?, updated_at=? WHERE user_id=?",
+        (new_energy, tick_progress, int(time.time()), uid),
+    )
+    if coins_earned:
+        await add_balance(uid, coins_earned)
+    return usable, coins_earned
+
+
+async def miner_upgrade(uid, track):
+    state = await get_miner_state(uid)
+    if track == "energy":
+        level, max_level, costs = state["cap_level"], MINER_CAP_MAX_LEVEL, MINER_CAP_COSTS
+        col = "cap_level"
+    else:
+        level, max_level, costs = state["reward_level"], MINER_REWARD_MAX_LEVEL, MINER_REWARD_COSTS
+        col = "reward_level"
+    if level >= max_level:
+        return None, "max_level"
+    cost = costs[level + 1]
+    if not await spend(uid, cost):
+        return None, "insufficient_funds"
+    await db(f"UPDATE miner_state SET {col}={col}+1 WHERE user_id=?", (uid,))
+    return cost, None
 
 
 async def top10():
