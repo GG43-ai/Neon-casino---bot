@@ -1432,7 +1432,6 @@ threading.Thread(target=run_web_server, daemon=True).start()
 
 # ---------- DB SETUP (Neon PostgreSQL) ----------
 from concurrent.futures import ThreadPoolExecutor
-from psycopg2 import pool as pg_pool
 
 DB_URL = os.getenv("DATABASE_URL")
 
@@ -1440,18 +1439,75 @@ DB_URL = os.getenv("DATABASE_URL")
 # поэтому запросы разных игроков идут параллельно и не блокируют бота.
 # Для Neon лучше использовать "pooled connection" строку (хост с -pooler).
 #
-# DB_POOL_MIN=0 — ПРИНЦИПОВО важливо для serverless-біллінгу Neon. psycopg2
-# кешує з'єднання, що повертається в пул, лише якщо вільних з'єднань у пулі
-# менше за DB_POOL_MIN; інакше воно одразу закривається. При MIN=3 завжди
-# висіли 3 відкритих з'єднання 24/7, навіть без жодного гравця — для Neon це
-# означало compute, що ніколи не засинає (3 з'єднання × 24год × 30дн ≈ 2160
-# "годин роботи" на місяць), і саме це, а не кількість гравців, спалювало
-# місячну квоту за лічені дні. При MIN=0 з'єднання закривається одразу після
-# кожного запиту — Neon реально засинає між сплесками активності.
+# Раніше тут був psycopg2.pool.ThreadedConnectionPool з DB_POOL_MIN=0 — це
+# рятувало квоту Neon (з'єднання не висіли 24/7), але мало побічний ефект:
+# у psycopg2 "minconn=0" означає, що putconn() ЗАВЖДИ закриває з'єднання,
+# яке повертають у пул, — тобто перевикористання не було взагалі, і КОЖЕН
+# окремий запит до бази (навіть два поспіль в одному кліку гравця) платив
+# повний цикл TCP+TLS+auth наново. Саме це, а не лише "сон після паузи",
+# і було головною причиною повільних покупок.
+#
+# SimpleIdlePool нижче — заміна на ту саму публічну поведінку (getconn/
+# putconn), але з'єднання, що повертається, РЕАЛЬНО лишається в пулі, тож
+# під час активної гри запити перевикористовують одне й те саме з'єднання
+# й ідуть швидко. Квота не горить, бо окремий фоновий таск (_keep_db_warm,
+# нижче) сам примусово закриває все накопичене в пулі, щойно кілька
+# хвилин немає жодного /api/-запиту.
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "15"))
-DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "0"))
-DB_POOL = pg_pool.ThreadedConnectionPool(
-    DB_POOL_MIN,
+
+
+class SimpleIdlePool:
+    def __init__(self, maxconn, dsn, **kwargs):
+        self._dsn = dsn
+        self._kwargs = kwargs
+        self._maxconn = maxconn
+        self._lock = threading.Lock()
+        self._idle = []  # [(conn, last_used_ts), ...]
+
+    def getconn(self):
+        with self._lock:
+            while self._idle:
+                conn, _ = self._idle.pop()
+                if not conn.closed:
+                    return conn
+        return psycopg2.connect(self._dsn, **self._kwargs)
+
+    def putconn(self, conn, close=False):
+        if close or conn.closed:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
+        with self._lock:
+            if len(self._idle) < self._maxconn:
+                self._idle.append((conn, time.time()))
+                return
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    def reap_idle(self, max_age):
+        """Закриває пуловані з'єднання, якими не користувались довше за
+        max_age секунд (max_age=0 — закриває геть усе, що простоює)."""
+        now = time.time()
+        with self._lock:
+            keep, stale = [], []
+            for conn, ts in self._idle:
+                if now - ts > max_age:
+                    stale.append(conn)
+                else:
+                    keep.append((conn, ts))
+            self._idle = keep
+        for conn in stale:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+DB_POOL = SimpleIdlePool(
     DB_POOL_SIZE,
     DB_URL,
     connect_timeout=10,
@@ -3469,16 +3525,18 @@ KEEPWARM_ACTIVE_WINDOW = 300  # 5 хв без жодного /api/-запиту 
 
 
 async def _keep_db_warm():
-    """При DB_POOL_MIN=0 з'єднання не висять постійно (щоб не палити квоту
-    Neon), тому Neon реально засинає — і перший запит після паузи завжди
-    буде повільним, скільки не тюнінгуй код. Єдине, що тут можна зробити —
-    не давати базі заснути, ПОКИ є реальні гравці (щоб наступні їхні дії
-    лишались швидкими), і одразу переставати пінгувати, щойно трафік
-    стихає на кілька хвилин (щоб не повторити стару помилку з MIN=3,
-    коли база взагалі ніколи не спала й квота згорала за лічені дні)."""
+    """Два завдання одним тактом раз на 90с:
+    1) ПОКИ є реальні гравці (був /api/-запит за останні 5 хв) — шлемо
+       легкий пінг, щоб Neon не засинав посеред активної гри;
+    2) щойно трафік стихає на ці 5 хв — примусово закриваємо все, що
+       SimpleIdlePool встиг накопичити (reap_idle(0)), і більше нічого не
+       пінгуємо. Без цього кроку пул і далі тримав би відкриті з'єднання
+       нескінченно довго після того, як усі вже пішли, — а саме постійно
+       відкриті з'єднання 24/7 і спалювали квоту Neon за лічені дні."""
     while True:
         await asyncio.sleep(90)  # з запасом коротше за таймаут простою Neon
         if time.time() - _LAST_ACTIVITY_TS[0] > KEEPWARM_ACTIVE_WINDOW:
+            DB_POOL.reap_idle(0)
             continue  # нікого нема — хай спокійно засинає, економимо квоту
         try:
             await db("SELECT 1")
