@@ -1380,6 +1380,7 @@ DB_POOL = pg_pool.ThreadedConnectionPool(
     DB_POOL_MIN,
     DB_POOL_SIZE,
     DB_URL,
+    connect_timeout=10,
     keepalives=1,
     keepalives_idle=30,
     keepalives_interval=10,
