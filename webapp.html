@@ -377,12 +377,40 @@
 
   .case-reveal{position:fixed;inset:0;z-index:90;background:rgba(6,4,14,.86);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:24px}
   .case-reveal.show{display:flex}
-  .case-revealcard{background:linear-gradient(160deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:30px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:300px;width:100%;box-shadow:0 0 60px rgba(255,106,213,.25)}
-  .case-revealbox{font-size:4rem;animation:revealpop .5s cubic-bezier(.34,1.56,.64,1)}
+  .case-revealcard{background:linear-gradient(160deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:22px 18px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:320px;width:100%;box-shadow:0 0 60px rgba(255,106,213,.25)}
+  .case-revealbox{font-size:4rem;display:none}
+  .case-revealbox.show{display:block;animation:revealpop .5s cubic-bezier(.34,1.56,.64,1)}
   @keyframes revealpop{0%{transform:scale(0) rotate(-20deg);opacity:0}60%{transform:scale(1.15) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
-  .case-revealname{color:var(--dim);font-size:.8rem}
-  .case-revealamt{font-family:'Unbounded',sans-serif;font-size:1.5rem;font-weight:800;color:var(--gold);display:flex;align-items:center;gap:6px}
-  .case-revealbtn{margin-top:8px;width:100%;padding:13px;border-radius:13px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.82rem;background:var(--pink);color:#2b0318}
+  .case-revealname{color:var(--dim);font-size:.8rem;opacity:0;transition:opacity .25s}
+  .case-revealamt{font-family:'Unbounded',sans-serif;font-size:1.5rem;font-weight:800;color:var(--gold);display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .25s}
+  .case-revealname.show,.case-revealamt.show{opacity:1}
+  .case-revealbtn{margin-top:8px;width:100%;padding:13px;border-radius:13px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.82rem;background:var(--pink);color:#2b0318;opacity:0;pointer-events:none;transition:opacity .25s}
+  .case-revealbtn.show{opacity:1;pointer-events:auto}
+
+  /* Рулетка відкриття кейса (як у CS) */
+  .casereel-wrap{position:relative;width:100%;margin-bottom:4px;display:none}
+  .casereel-wrap.show{display:block}
+  .casereel-marker{position:absolute;top:-6px;bottom:-6px;left:50%;width:2px;margin-left:-1px;background:linear-gradient(var(--pink),var(--cyan));z-index:2;box-shadow:0 0 8px rgba(255,106,213,.7)}
+  .casereel-marker::before,.casereel-marker::after{content:'';position:absolute;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent}
+  .casereel-marker::before{top:-6px;border-top:7px solid var(--pink)}
+  .casereel-marker::after{bottom:-6px;border-bottom:7px solid var(--pink)}
+  .casereel-viewport{overflow:hidden;width:100%;height:92px;border-radius:14px;background:var(--bg2);border:1px solid rgba(255,255,255,.08);-webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent)}
+  .casereel-track{display:flex;align-items:center;height:100%;will-change:transform;transform:translate3d(0,0,0)}
+  .reelitem{flex:0 0 76px;width:76px;height:76px;margin-right:8px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--panel);border:1px solid rgba(255,255,255,.08)}
+  .reelitem .remoji{font-size:1.5rem}
+  .reelitem .ramt{font-family:'Unbounded',sans-serif;font-size:.6rem;color:var(--dim)}
+  .reelitem.t-common{border-color:rgba(255,255,255,.14)}
+  .reelitem.t-uncommon{border-color:rgba(0,224,255,.45);box-shadow:0 0 10px rgba(0,224,255,.18) inset}
+  .reelitem.t-uncommon .ramt{color:var(--cyan)}
+  .reelitem.t-rare{border-color:rgba(139,92,246,.55);box-shadow:0 0 10px rgba(139,92,246,.22) inset}
+  .reelitem.t-rare .ramt{color:#b79bff}
+  .reelitem.t-epic{border-color:rgba(255,106,213,.6);box-shadow:0 0 12px rgba(255,106,213,.28) inset}
+  .reelitem.t-epic .ramt{color:var(--pink)}
+  .reelitem.t-legendary{border-color:rgba(255,195,66,.7);box-shadow:0 0 16px rgba(255,195,66,.35) inset}
+  .reelitem.t-legendary .ramt{color:var(--gold);font-weight:700}
+  .reelitem.winner.landed{animation:reellanded .45s ease-out}
+  @keyframes reellanded{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
+  body.anim-off .casereel-track{transition:none!important}
 
   /* UPGRADE WHEEL */
   .upgwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px}
@@ -923,6 +951,12 @@
 
   <div class="case-reveal" id="caseReveal">
     <div class="case-revealcard">
+      <div class="casereel-wrap" id="caseReelWrap">
+        <div class="casereel-marker"></div>
+        <div class="casereel-viewport">
+          <div class="casereel-track" id="caseReelTrack"></div>
+        </div>
+      </div>
       <div class="case-revealbox" id="caseRevealBox">🎁</div>
       <div class="case-revealname" id="caseRevealName"></div>
       <div class="case-revealamt" id="caseRevealAmt"></div>
@@ -2351,6 +2385,9 @@
     var revealName = document.getElementById('caseRevealName');
     var revealAmt = document.getElementById('caseRevealAmt');
     var revealClose = document.getElementById('caseRevealClose');
+    var reelWrap = document.getElementById('caseReelWrap');
+    var reelTrack = document.getElementById('caseReelTrack');
+    var reelViewport = reelWrap ? reelWrap.querySelector('.casereel-viewport') : null;
     var cases = [];
     var busy = false;
 
@@ -2383,6 +2420,88 @@
     function rerenderCases(){ if (cases.length) render(); }
     window.rerenderCases = rerenderCases;
 
+    /* ---- Рулетка відкриття (як у CS): смуга предметів їде вліво й
+       зупиняється точно на виграному. Візуальні "сусідні" предмети —
+       суто декоративні (сервер жодним чином їх не визначає), реальну
+       винагороду вже порахував і списав бекенд одним атомарним запитом
+       ДО старту анімації — вона лише програє результат, що вже настав. */
+    var RARITY = [
+      {cls:'t-common',   max:0.7,  emoji:'🪙'},
+      {cls:'t-uncommon', max:1.5,  emoji:'💰'},
+      {cls:'t-rare',     max:6,    emoji:'💎'},
+      {cls:'t-epic',     max:30,   emoji:'🔥'},
+      {cls:'t-legendary',max:Infinity, emoji:'👑'}
+    ];
+    function rarityFor(ratio){
+      for (var i=0;i<RARITY.length;i++){ if (ratio <= RARITY[i].max) return RARITY[i]; }
+      return RARITY[RARITY.length-1];
+    }
+    function randomFillerRatio(){
+      var r = Math.random();
+      if (r < 0.52) return 0.15 + Math.random()*0.55;
+      if (r < 0.77) return 0.70 + Math.random()*0.80;
+      if (r < 0.92) return 1.50 + Math.random()*4.50;
+      if (r < 0.985) return 6 + Math.random()*24;
+      return 30 + Math.random()*210;
+    }
+    var REEL_LEN = 24, TARGET_INDEX = 18, ITEM_W = 84;
+    function buildReelItems(price, reward){
+      var items = [];
+      for (var i=0;i<REEL_LEN;i++){
+        if (i === TARGET_INDEX) continue;
+        var ratio = randomFillerRatio();
+        var t = rarityFor(ratio);
+        items[i] = {amt: Math.max(1, Math.round(price*ratio)), cls: t.cls, emoji: t.emoji};
+      }
+      var winT = rarityFor(reward/price);
+      items[TARGET_INDEX] = {amt: reward, cls: winT.cls, emoji: winT.emoji, winner:true};
+      return items;
+    }
+    function reelItemHtml(it){
+      return '<div class="reelitem '+it.cls+(it.winner?' winner':'')+'">' +
+        '<div class="remoji">'+it.emoji+'</div><div class="ramt">'+it.amt+'</div></div>';
+    }
+    // Один компактний цикл для всієї прокрутки — єдина CSS-transition на
+    // transform (GPU-композитинг), без жодного JS requestAnimationFrame-
+    // циклу під час самого руху, щоб не лагало на слабких телефонах.
+    function spinReel(items, onDone){
+      reelTrack.innerHTML = items.map(reelItemHtml).join('');
+      reelTrack.style.transition = 'none';
+      reelTrack.style.transform = 'translate3d(0,0,0)';
+      void reelTrack.offsetWidth; // форсуємо reflow — скидання позиції застосувалось
+      var vw = reelViewport.clientWidth || 280;
+      var targetCenter = TARGET_INDEX*ITEM_W + ITEM_W/2;
+      var jitter = (Math.random()*0.5 - 0.25) * ITEM_W;
+      var finalX = Math.round(vw/2 - (targetCenter + jitter));
+      var done = false;
+      function finish(){
+        if (done) return;
+        done = true;
+        reelTrack.removeEventListener('transitionend', onEnd);
+        reelViewport.removeEventListener('click', onTap);
+        reelTrack.style.willChange = 'auto';
+        var winnerEl = reelTrack.querySelector('.reelitem.winner');
+        if (winnerEl) winnerEl.classList.add('landed');
+        onDone();
+      }
+      function onEnd(e){ if (e.propertyName === 'transform') finish(); }
+      function onTap(){
+        if (done) return;
+        reelTrack.style.transition = 'transform .15s linear';
+        reelTrack.style.transform = 'translate3d(' + finalX + 'px,0,0)';
+      }
+      reelTrack.addEventListener('transitionend', onEnd);
+      reelViewport.addEventListener('click', onTap);
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          reelTrack.style.willChange = 'transform';
+          reelTrack.style.transition = 'transform 4.1s cubic-bezier(.12,.74,.14,1)';
+          reelTrack.style.transform = 'translate3d(' + finalX + 'px,0,0)';
+        });
+      });
+      setTimeout(finish, 4600); // запобіжник на випадок, якщо transitionend не прийде
+    }
+
     async function openCase(id){
       if (busy) return;
       var card = caseGrid.querySelector('.casecard[data-id="'+id+'"]');
@@ -2395,9 +2514,7 @@
       if (btn) btn.disabled = true;
       try {
         var r = await api('/api/cases/open', {case_id:id});
-        setBalance(r.balance);
-        showReveal(c, r.reward);
-        haptic('ok');
+        showReveal(c, r.reward, r.balance);
       } catch(e){
         haptic('fail');
       } finally {
@@ -2407,13 +2524,42 @@
       }
     }
 
-    function showReveal(c, reward){
-      revealBox.textContent = c.emoji;
-      revealName.textContent = c.name;
-      revealAmt.textContent = '+' + reward + ' 💰';
+    function showReveal(c, reward, newBalance){
       reveal.classList.add('show');
+      revealName.textContent = c.name;
+      var canSpin = settings.anim && reelWrap && reelTrack && reelViewport;
+      revealBox.classList.remove('show');
+      revealName.classList.remove('show');
+      revealAmt.classList.remove('show');
+      revealClose.classList.remove('show');
+      if (canSpin){
+        reelWrap.classList.add('show');
+        var items = buildReelItems(c.price, reward);
+        spinReel(items, function(){
+          setBalance(newBalance);
+          revealAmt.textContent = '+' + reward + ' 💰';
+          revealName.classList.add('show');
+          revealAmt.classList.add('show');
+          revealClose.classList.add('show');
+          haptic('ok');
+        });
+      } else {
+        if (reelWrap) reelWrap.classList.remove('show');
+        revealBox.textContent = c.emoji;
+        revealBox.classList.add('show');
+        revealAmt.textContent = '+' + reward + ' 💰';
+        revealName.classList.add('show');
+        revealAmt.classList.add('show');
+        revealClose.classList.add('show');
+        setBalance(newBalance);
+        haptic('ok');
+      }
     }
-    function hideReveal(){ reveal.classList.remove('show'); }
+    function hideReveal(){
+      reveal.classList.remove('show');
+      if (reelWrap) reelWrap.classList.remove('show');
+      if (reelTrack) reelTrack.innerHTML = '';
+    }
     if (revealClose) revealClose.addEventListener('click', function(){ hideReveal(); haptic(); });
     if (reveal) reveal.addEventListener('click', function(e){ if (e.target === reveal) hideReveal(); });
 

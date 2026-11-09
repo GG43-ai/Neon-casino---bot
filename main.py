@@ -331,7 +331,7 @@ CASE_TIERS = [
     (3.00, 6.00, 0.03),
     (8.00, 12.00, 0.008),
     (20.00, 30.00, 0.0015),
-    (40.00, 60.00, 0.0005),
+    (160.00, 240.00, 0.0005),  # джекпот-тір (~0.1%) — у 4 рази більший за попередній (був 40.00–60.00)
 ]
 
 
@@ -723,7 +723,8 @@ def api_shop_buy():
     if meta["type"] == "theme":
         return {"error": "free_item"}, 400
 
-    call_async(get_user(uid, username))
+    # Так само, як у /api/cases/open: get_user() тут зайвий — рядок
+    # користувача вже існує (створюється при /start бота й на /api/me).
     new_balance = call_async(buy_item_atomic(uid, item_id, meta["price"]))
     if new_balance is None:
         # Окрема перевірка лише на шляху ПОМИЛКИ — щасливий шлях (успішна
@@ -775,7 +776,10 @@ def api_cases_open():
     if not auth:
         return {"error": "unauthorized"}, 401
     uid, username = auth
-    call_async(get_user(uid, username))
+    # Окремого get_user() тут більше нема: рядок користувача в БД вже
+    # гарантовано створений раніше (при /start бота й на /api/me, який
+    # викликається при кожному переході по застосунку) — зайвий round-trip
+    # до бази лише сповільнював відкриття кейса.
     case_id = str((request.get_json(silent=True) or {}).get("case_id", ""))
     result, err = call_async(open_case_atomic(uid, case_id))
     if err:
