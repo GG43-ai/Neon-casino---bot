@@ -304,6 +304,67 @@ SHOP_ITEMS = {
     "theme_royal":   {"type": "theme", "name": "Королівська тема","price": 0},
 }
 
+# ---------- КЕЙСИ: 10 кейсів різної ціни, нагорода — лише монети ----------
+CASES = [
+    {"id": "case1",  "name": "Стартовий",    "emoji": "📦", "price": 100},
+    {"id": "case2",  "name": "Бронзовий",    "emoji": "🥉", "price": 250},
+    {"id": "case3",  "name": "Срібний",      "emoji": "🥈", "price": 500},
+    {"id": "case4",  "name": "Золотий",      "emoji": "🥇", "price": 1000},
+    {"id": "case5",  "name": "Діамантовий",  "emoji": "💎", "price": 2000},
+    {"id": "case6",  "name": "Вогняний",     "emoji": "🔥", "price": 3500},
+    {"id": "case7",  "name": "Блискавка",    "emoji": "⚡", "price": 6000},
+    {"id": "case8",  "name": "Королівський", "emoji": "👑", "price": 10000},
+    {"id": "case9",  "name": "Галактичний",  "emoji": "🌌", "price": 20000},
+    {"id": "case10", "name": "Легендарний",  "emoji": "🚀", "price": 40000},
+]
+CASES_BY_ID = {c["id"]: c for c in CASES}
+
+# (множник_від, множник_до, ймовірність) відносно ціни кейса — ОДНА таблиця
+# шансів для всіх 10 кейсів. Разом дає ≈88% RTP (~12% перевага закладу,
+# як і в інших іграх казино): здебільшого повертає менше за ціну кейса,
+# зрідка — вище, і зовсім рідко — великий джекпот. Сума ймовірностей = 1.0.
+CASE_TIERS = [
+    (0.15, 0.35, 0.40),
+    (0.40, 0.70, 0.30),
+    (0.80, 1.20, 0.18),
+    (1.50, 2.50, 0.08),
+    (3.00, 6.00, 0.03),
+    (8.00, 12.00, 0.008),
+    (20.00, 30.00, 0.0015),
+    (40.00, 60.00, 0.0005),
+]
+
+
+def _roll_case_reward(price):
+    r = random.uniform(0, 1)
+    acc = 0.0
+    for lo, hi, prob in CASE_TIERS:
+        acc += prob
+        if r <= acc:
+            return max(1, round(price * random.uniform(lo, hi)))
+    lo, hi, _ = CASE_TIERS[-1]  # на випадок похибки округлення ймовірностей
+    return max(1, round(price * random.uniform(lo, hi)))
+
+
+async def open_case_atomic(uid, case_id):
+    """Списання ціни й нарахування призу ОДНИМ атомарним запитом (той самий
+    підхід, що й у buy_item_atomic): WHERE balance>=price не дає піти в
+    мінус навіть при одночасних запитах, і це один мережевий 'хід' до бази,
+    а не окремі списання+нарахування."""
+    case = CASES_BY_ID.get(case_id)
+    if not case:
+        return None, "not_found"
+    reward = _roll_case_reward(case["price"])
+    row = await db(
+        "UPDATE users SET balance = balance - ? + ? "
+        "WHERE user_id = ? AND balance >= ? RETURNING balance",
+        (case["price"], reward, uid, case["price"]), "one",
+    )
+    if not row:
+        return None, "insufficient_funds"
+    return {"reward": reward, "balance": row[0], "price": case["price"]}, None
+
+
 # ---------- АПГРЕЙД: колесо з жовтим/сірим сектором ----------
 UPGRADE_MIN_MULT = 1.2
 UPGRADE_MAX_MULT = 20.0
@@ -699,6 +760,27 @@ def api_shop_equip():
 
     call_async(set_equipped(uid, slot, item_id))
     return {"ok": True, "slot": slot, "item_id": item_id}
+
+
+@app.route("/api/cases/list", methods=["POST"])
+def api_cases_list():
+    if not authed_user():
+        return {"error": "unauthorized"}, 401
+    return {"items": CASES}
+
+
+@app.route("/api/cases/open", methods=["POST"])
+def api_cases_open():
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    call_async(get_user(uid, username))
+    case_id = str((request.get_json(silent=True) or {}).get("case_id", ""))
+    result, err = call_async(open_case_atomic(uid, case_id))
+    if err:
+        return {"error": err}, 400
+    return {"ok": True, **result}
 
 
 # ---------- АПГРЕЙД: колесо з жовтим (виграш) і сірим (програш) сектором ----------
