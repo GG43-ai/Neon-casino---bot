@@ -366,8 +366,10 @@
   .casecard{position:relative;background:linear-gradient(160deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 10px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:7px;overflow:hidden;transition:transform .18s}
   .casecard::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% -10%,rgba(255,106,213,.18),transparent 60%);pointer-events:none}
   .casecard:active{transform:scale(.95)}
-  .casecard .cemoji{font-size:2.1rem;filter:drop-shadow(0 0 10px rgba(255,106,213,.35));animation:casefloat 2.6s ease-in-out infinite}
+  .casecard .cemoji{position:relative;font-size:2.1rem;filter:drop-shadow(0 0 10px rgba(255,106,213,.35));animation:casefloat 2.6s ease-in-out infinite;cursor:pointer}
   @keyframes casefloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  .casecard .cemoji .cinfo{position:absolute;top:-4px;right:-10px;font-size:.62rem;color:var(--dim);background:var(--bg2);border-radius:50%;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.12)}
+  .casecard .cemoji:active .cinfo{color:var(--pink);border-color:var(--pink)}
   .casecard .cname{font-family:'Unbounded',sans-serif;font-size:.72rem;font-weight:700;min-height:2.1em;display:flex;align-items:center}
   .casecard .cprice{font-family:'Unbounded',sans-serif;font-size:.74rem;color:var(--gold);display:flex;align-items:center;gap:4px}
   .casecard button{width:100%;padding:9px;border-radius:10px;font-size:.68rem;font-weight:700;background:linear-gradient(135deg,var(--pink),#ff8fd6);color:#2b0318;margin-top:2px}
@@ -381,11 +383,12 @@
   .case-revealbox{font-size:4rem;display:none}
   .case-revealbox.show{display:block;animation:revealpop .5s cubic-bezier(.34,1.56,.64,1)}
   @keyframes revealpop{0%{transform:scale(0) rotate(-20deg);opacity:0}60%{transform:scale(1.15) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
-  .case-revealname{color:var(--dim);font-size:.8rem;opacity:0;transition:opacity .25s}
-  .case-revealamt{font-family:'Unbounded',sans-serif;font-size:1.5rem;font-weight:800;color:var(--gold);display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .25s}
-  .case-revealname.show,.case-revealamt.show{opacity:1}
-  .case-revealbtn{margin-top:8px;width:100%;padding:13px;border-radius:13px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.82rem;background:var(--pink);color:#2b0318;opacity:0;pointer-events:none;transition:opacity .25s}
-  .case-revealbtn.show{opacity:1;pointer-events:auto}
+  .case-revealname{color:var(--dim);font-size:.8rem;opacity:0;transform:translateY(16px);transition:opacity .35s ease,transform .4s cubic-bezier(.22,1,.36,1)}
+  .case-revealamt{font-family:'Unbounded',sans-serif;font-size:1.5rem;font-weight:800;color:var(--gold);display:flex;align-items:center;gap:6px;opacity:0;transform:translateY(16px);transition:opacity .35s ease .06s,transform .4s cubic-bezier(.22,1,.36,1) .06s}
+  .case-revealname.show,.case-revealamt.show{opacity:1;transform:translateY(0)}
+  .case-revealbtn{margin-top:8px;width:100%;padding:13px;border-radius:13px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.82rem;background:var(--pink);color:#2b0318;opacity:0;transform:translateY(20px);pointer-events:none;transition:opacity .35s ease .12s,transform .4s cubic-bezier(.22,1,.36,1) .12s}
+  .case-revealbtn.show{opacity:1;transform:translateY(0);pointer-events:auto}
+  body.anim-off .case-revealname,body.anim-off .case-revealamt,body.anim-off .case-revealbtn{transition:opacity .15s!important;transform:none!important}
 
   /* Рулетка відкриття кейса (як у CS) */
   .casereel-wrap{position:relative;width:100%;margin-bottom:4px;display:none}
@@ -411,6 +414,31 @@
   .reelitem.winner.landed{animation:reellanded .45s ease-out}
   @keyframes reellanded{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
   body.anim-off .casereel-track{transition:none!important}
+
+  /* Шанси кейса — відкривається тапом по аватарці кейса */
+  .case-odds{position:fixed;inset:0;z-index:91;background:rgba(6,4,14,.86);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:24px}
+  .case-odds.show{display:flex}
+  .case-oddscard{background:linear-gradient(160deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:20px 18px;display:flex;flex-direction:column;gap:14px;max-width:320px;width:100%;box-shadow:0 0 60px rgba(0,224,255,.18)}
+  .case-oddshead{display:flex;align-items:center;gap:12px}
+  .case-oddsemoji{font-size:2.3rem}
+  .case-oddsname{font-family:'Unbounded',sans-serif;font-weight:700;font-size:.88rem}
+  .case-oddsprice{font-size:.74rem;color:var(--gold);margin-top:2px}
+  .case-oddslist{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
+  .case-oddsrow{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:11px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);font-size:.74rem}
+  .case-oddsrow .orange{color:var(--text)}
+  .case-oddsrow .opct{font-family:'Unbounded',sans-serif;font-weight:700;font-size:.72rem}
+  .case-oddsrow.t-common .opct{color:var(--dim)}
+  .case-oddsrow.t-uncommon{border-color:rgba(0,224,255,.35)}
+  .case-oddsrow.t-uncommon .opct{color:var(--cyan)}
+  .case-oddsrow.t-rare{border-color:rgba(139,92,246,.4)}
+  .case-oddsrow.t-rare .opct{color:#b79bff}
+  .case-oddsrow.t-epic{border-color:rgba(255,106,213,.45)}
+  .case-oddsrow.t-epic .opct{color:var(--pink)}
+  .case-oddsrow.t-legendary{border-color:rgba(255,195,66,.5)}
+  .case-oddsrow.t-legendary .opct{color:var(--gold)}
+  .case-oddsbtns{display:flex;gap:8px}
+  .case-oddsopen{flex:1;padding:12px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.78rem;background:linear-gradient(135deg,var(--pink),#ff8fd6);color:#2b0318}
+  .case-oddsclose{flex:1;padding:12px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.78rem;background:var(--bg2);border:1px solid rgba(255,255,255,.12);color:var(--dim)}
 
   /* UPGRADE WHEEL */
   .upgwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px}
@@ -964,6 +992,23 @@
     </div>
   </div>
 
+  <div class="case-odds" id="caseOdds">
+    <div class="case-oddscard">
+      <div class="case-oddshead">
+        <div class="case-oddsemoji" id="caseOddsEmoji">📦</div>
+        <div>
+          <div class="case-oddsname" id="caseOddsName"></div>
+          <div class="case-oddsprice" id="caseOddsPrice"></div>
+        </div>
+      </div>
+      <div class="case-oddslist" id="caseOddsList"></div>
+      <div class="case-oddsbtns">
+        <button class="case-oddsopen" id="caseOddsOpenBtn" data-i18n="case_open">Відкрити</button>
+        <button class="case-oddsclose" id="caseOddsCloseBtn" data-i18n="case_close">Закрити</button>
+      </div>
+    </div>
+  </div>
+
   <nav class="navbar" id="navbar">
     <div class="navslide" id="navSlide"></div>
     <button class="navbtn active" data-goto="home"><svg viewBox="0 0 24 24" class="ic"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg><span data-i18n="nav_home">Головна</span></button>
@@ -1058,6 +1103,7 @@
     set_lang:{ua:'🌐 Мова',ru:'🌐 Язык',en:'🌐 Language'},
     back_to_bot:{ua:'Повернутись у чат',ru:'Вернуться в чат',en:'Back to chat'},
     case_open:{ua:'Відкрити',ru:'Открыть',en:'Open'},
+    case_close:{ua:'Закрити',ru:'Закрыть',en:'Close'},
     case_claim:{ua:'Забрати',ru:'Забрать',en:'Claim'}
   };
   var currentLang = 'ua';
@@ -2393,7 +2439,7 @@
 
     function cardHtml(c){
       return '<div class="casecard" data-id="'+c.id+'">' +
-        '<div class="cemoji">'+c.emoji+'</div>' +
+        '<div class="cemoji" data-odds="'+c.id+'">'+c.emoji+'<i class="cinfo">ⓘ</i></div>' +
         '<div class="cname">'+c.name+'</div>' +
         '<div class="cprice">'+c.price+' 💰</div>' +
         '<button data-id="'+c.id+'">'+t('case_open')+'</button>' +
@@ -2404,6 +2450,9 @@
       caseGrid.innerHTML = cases.map(cardHtml).join('');
       caseGrid.querySelectorAll('button[data-id]').forEach(function(btn){
         btn.addEventListener('click', function(){ openCase(btn.dataset.id); });
+      });
+      caseGrid.querySelectorAll('[data-odds]').forEach(function(el){
+        el.addEventListener('click', function(){ showOdds(el.dataset.odds); });
       });
     }
 
@@ -2436,6 +2485,45 @@
       for (var i=0;i<RARITY.length;i++){ if (ratio <= RARITY[i].max) return RARITY[i]; }
       return RARITY[RARITY.length-1];
     }
+
+    /* ---- "Що може випасти" — тап по аватарці кейса ПЕРЕД відкриттям.
+       Шанси приходять з бекенду (/api/cases/list) — та сама таблиця, що
+       й реально розігрує сервер, тож тут нема окремих "чесних на вигляд"
+       цифр, які можуть розʼїхатися зі справжніми. ---- */
+    var oddsModal = document.getElementById('caseOdds');
+    var oddsEmoji = document.getElementById('caseOddsEmoji');
+    var oddsName = document.getElementById('caseOddsName');
+    var oddsPrice = document.getElementById('caseOddsPrice');
+    var oddsList = document.getElementById('caseOddsList');
+    var oddsOpenBtn = document.getElementById('caseOddsOpenBtn');
+    var oddsCloseBtn = document.getElementById('caseOddsCloseBtn');
+    var oddsCurrentId = null;
+
+    function showOdds(id){
+      var c = cases.find(function(x){ return x.id===id; });
+      if (!c || !oddsModal) return;
+      oddsCurrentId = id;
+      oddsEmoji.textContent = c.emoji;
+      oddsName.textContent = c.name;
+      oddsPrice.textContent = c.price + ' 💰';
+      var rows = (c.odds || []).slice().sort(function(a,b){ return b.min - a.min; });
+      oddsList.innerHTML = rows.map(function(o){
+        var ratio = ((o.min + o.max) / 2) / c.price;
+        var tier = rarityFor(ratio);
+        var range = o.min === o.max ? (o.min + ' 💰') : (o.min + '–' + o.max + ' 💰');
+        return '<div class="case-oddsrow ' + tier.cls + '"><span class="orange">' + range + '</span><span class="opct">' + o.chance + '%</span></div>';
+      }).join('');
+      oddsModal.classList.add('show');
+      haptic();
+    }
+    function hideOdds(){ if (oddsModal) oddsModal.classList.remove('show'); }
+    if (oddsCloseBtn) oddsCloseBtn.addEventListener('click', function(){ hideOdds(); haptic(); });
+    if (oddsModal) oddsModal.addEventListener('click', function(e){ if (e.target === oddsModal) hideOdds(); });
+    if (oddsOpenBtn) oddsOpenBtn.addEventListener('click', function(){
+      hideOdds();
+      if (oddsCurrentId) openCase(oddsCurrentId);
+    });
+
     function randomFillerRatio(){
       var r = Math.random();
       if (r < 0.52) return 0.15 + Math.random()*0.55;

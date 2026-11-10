@@ -217,6 +217,59 @@ def authed_user():
     return None
 
 
+# ---------- Античіт: обмеження частоти грошових дій ----------
+# Інтерфейс сам не дає натиснути "купити"/"відкрити" частіше, ніж раз на
+# дію (кнопка блокується на час запиту), але це лише JS — ніщо не заважає
+# скрипту чи консолі бити по /api/... напряму в обхід інтерфейсу. Кожна
+# грошова операція вже атомарна й сама по собі коректна навіть під шквалом
+# запитів (WHERE balance>=price не дає піти в мінус), але без ліміту
+# бот може банально фармити результати (кейси/ставки) у десятки разів
+# швидше за людину. RATE_LIMIT_MS — мінімальний інтервал між двома такими
+# діями ОДНОГО користувача; людина фізично не тапає швидше.
+RATE_LIMIT_MS = 220
+RATE_LIMITED_PATHS = {
+    "/api/shop/buy", "/api/cases/open", "/api/upgrade/play",
+    "/api/mines/bet", "/api/mines/cashout",
+    # /api/mines/open навмисно НЕ тут: це не нова ставка й не списання
+    # грошей (вони вже внесені в mines/bet) — лише відкриття клітинки в
+    # уже оплаченій грі, яке гравець цілком може тапати швидко поспіль.
+    "/api/crash/bet", "/api/crash/cashout",
+    "/api/roulette/play", "/api/coinflip/play", "/api/basket/play",
+    "/api/football/play", "/api/darts/play", "/api/bowling/play",
+    "/api/slots/play", "/api/transfer", "/api/promo/redeem", "/api/bonus/claim",
+}
+_RATE_LAST = {}
+_RATE_LOCK = threading.Lock()
+
+
+def _rate_limited(uid):
+    now = time.time()
+    with _RATE_LOCK:
+        if len(_RATE_LAST) > 20000:
+            # Запобіжник від необмеженого росту словника — зрідка чистимо
+            # записи, яким уже точно більше не знадобляться (давніші за
+            # 5 хв мовчання цього користувача).
+            cutoff = now - 300
+            for k in [k for k, ts in _RATE_LAST.items() if ts < cutoff]:
+                del _RATE_LAST[k]
+        last = _RATE_LAST.get(uid, 0.0)
+        if (now - last) * 1000 < RATE_LIMIT_MS:
+            return True
+        _RATE_LAST[uid] = now
+        return False
+
+
+@app.before_request
+def _rate_limit_guard():
+    if request.method != "POST" or request.path not in RATE_LIMITED_PATHS:
+        return
+    auth = authed_user()
+    if not auth:
+        return  # відсутність авторизації все одно відхилить сам роут (401)
+    if _rate_limited(auth[0]):
+        return {"error": "too_fast"}, 429
+
+
 def admin_auth():
     """Повертає (uid, username), лише якщо авторизований користувач — адмін
     (ADMIN_USERNAME); інакше None. На сайті поза Telegram authed_user() не
@@ -344,6 +397,22 @@ def _roll_case_reward(price):
             return max(1, round(price * random.uniform(lo, hi)))
     lo, hi, _ = CASE_TIERS[-1]  # на випадок похибки округлення ймовірностей
     return max(1, round(price * random.uniform(lo, hi)))
+
+
+def case_odds_for(price):
+    """Таблиця шансів кейса в реальних монетах (для перегляду 'що може
+    випасти' ДО відкриття) — рахується з тих самих CASE_TIERS, що й сам
+    розіграш, тож клієнт завжди бачить правдиві шанси, а не окрему копію
+    цифр, яку легко забути оновити."""
+    result = []
+    for lo, hi, prob in CASE_TIERS:
+        pct = prob * 100
+        result.append({
+            "min": max(1, round(price * lo)),
+            "max": max(1, round(price * hi)),
+            "chance": round(pct, 1) if pct >= 1 else round(pct, 2),
+        })
+    return result
 
 
 async def open_case_atomic(uid, case_id):
@@ -767,7 +836,8 @@ def api_shop_equip():
 def api_cases_list():
     if not authed_user():
         return {"error": "unauthorized"}, 401
-    return {"items": CASES}
+    items = [dict(c, odds=case_odds_for(c["price"])) for c in CASES]
+    return {"items": items}
 
 
 @app.route("/api/cases/open", methods=["POST"])
@@ -1529,7 +1599,17 @@ class SimpleIdlePool:
                 conn, _ = self._idle.pop()
                 if not conn.closed:
                     return conn
-        return psycopg2.connect(self._dsn, **self._kwargs)
+        conn = psycopg2.connect(self._dsn, **self._kwargs)
+        # autocommit=True прибирає неявні BEGIN/COMMIT навколо кожного
+        # запиту: без нього psycopg2 шле їх окремими "ходами" до Neon
+        # (BEGIN -> запит -> COMMIT = 3 round-trip на кожен db()-виклик),
+        # хоча весь код тут і так робить один SQL-запит за раз (атомарні
+        # CTE на кшталт buy_item_atomic/open_case_atomic) — зберігати
+        # транзакцію між викликами ніхто не покладається. Лишається
+        # по суті 1 round-trip замість 3 — найбільший виграш у швидкості
+        # покупок/ставок з усього, що тут робилось.
+        conn.autocommit = True
+        return conn
 
     def putconn(self, conn, close=False):
         if close or conn.closed:
