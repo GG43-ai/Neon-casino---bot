@@ -12,6 +12,10 @@
   :root{
     --bg:#0a0613; --bg2:#140c24; --panel:#180f2a;
     --pink:#ff2d78; --cyan:#19e8ff; --gold:#ffc342; --green:#2bffa3; --red:#ff3b3b; --black:#1a1a22;
+    /* --violet — акцент Краша (графік/ракета/підсвітка). Один раз у базовому
+       :root, тому діє однаково під будь-якою темою з крамниці нижче — теми
+       перефарбовують лише pink/cyan/gold, цю змінну не чіпають. */
+    --violet:#b47bff;
     --text:#f3eefc; --dim:#a89fc4;
     box-sizing:border-box;
     padding-top:env(safe-area-inset-top,0px);
@@ -106,7 +110,7 @@
   /* CRASH */
   .crash-stage{position:relative;height:180px;border-radius:16px;background:linear-gradient(180deg,rgba(255,45,120,.06),transparent 60%);overflow:hidden;margin-bottom:14px}
   .crash-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:100% 24px}
-  .crash-mult{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-family:'Unbounded',sans-serif;font-weight:800;font-size:2.1rem;color:var(--cyan);z-index:2}
+  .crash-mult{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-family:'Unbounded',sans-serif;font-weight:800;font-size:2.1rem;color:var(--violet);z-index:2}
   .crash-mult.boom{color:var(--pink)}
   .crash-flash{position:absolute;inset:0;background:var(--pink);opacity:0;pointer-events:none}
   .crash-flash.hit{animation:flash .4s ease-out}
@@ -127,7 +131,7 @@
   .crash-row .crbet{color:var(--dim);font-family:'Unbounded',sans-serif;font-size:.68rem}
   .crash-row .crstatus{font-family:'Unbounded',sans-serif;font-weight:700;font-size:.7rem;white-space:nowrap}
   .crash-row.you{border-color:rgba(255,106,213,.4);background:rgba(255,106,213,.06)}
-  .crash-row.flying .crstatus{color:var(--cyan)}
+  .crash-row.flying .crstatus{color:var(--violet)}
   .crash-row.won{border-color:rgba(72,222,159,.4)}
   .crash-row.won .crstatus{color:#48de9f}
   .crash-row.lost{opacity:.6}
@@ -138,7 +142,7 @@
   .crash-history{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:2px}
   .crash-history::-webkit-scrollbar{display:none}
   .crash-histchip{flex:none;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.68rem;padding:5px 9px;border-radius:9px;background:var(--bg2);border:1px solid rgba(255,255,255,.08);color:var(--dim)}
-  .crash-histchip.mid{color:var(--cyan);border-color:rgba(0,224,255,.35)}
+  .crash-histchip.mid{color:var(--violet);border-color:rgba(180,123,255,.35)}
   .crash-histchip.high{color:var(--gold);border-color:rgba(255,195,66,.5);background:rgba(255,195,66,.08)}
 
   /* кнопка "шанси" поверх crash-mult */
@@ -146,11 +150,12 @@
   .crash-info:active{background:rgba(255,255,255,.16)}
 
   /* ракета, що летить лінією замість голої крапки */
-  .crash-rocket{position:absolute;left:0;top:100%;font-size:1.1rem;z-index:2;transform:translate(-50%,-50%);filter:drop-shadow(0 0 6px rgba(0,224,255,.7));transition:opacity .2s;will-change:left,top,transform}
+  .crash-rocket{position:absolute;left:0;top:100%;font-size:1.1rem;z-index:2;transform:translate(-50%,-50%);filter:drop-shadow(0 0 6px rgba(180,123,255,.7));transition:opacity .2s;will-change:left,top,transform}
   .crash-rocket.hidden{opacity:0}
 
   /* глоу й пульс під час польоту, тряска й спалах при вибуху */
-  #crashLine{filter:drop-shadow(0 0 5px rgba(0,224,255,.65))}
+  #crashLine{stroke:var(--violet);filter:drop-shadow(0 0 5px rgba(180,123,255,.65))}
+  #crashDot{fill:var(--violet)}
   .crash-stage.boomed #crashLine{filter:drop-shadow(0 0 7px rgba(255,45,120,.75))}
   .crash-mult.flying{animation:crashPulse .9s ease-in-out infinite}
   @keyframes crashPulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.07)}}
@@ -670,8 +675,8 @@
         <div class="crash-stage" id="crashStage">
           <div class="crash-grid"></div>
           <svg id="crashSvg" viewBox="0 0 300 190" preserveAspectRatio="none">
-            <polyline id="crashLine" points="0,190" fill="none" stroke="#19e8ff" stroke-width="3"/>
-            <circle id="crashDot" cx="0" cy="190" r="5" fill="#19e8ff" opacity="0"/>
+            <polyline id="crashLine" points="0,190" fill="none" stroke="#b47bff" stroke-width="3"/>
+            <circle id="crashDot" cx="0" cy="190" r="5" fill="#b47bff" opacity="0"/>
           </svg>
           <div class="crash-rocket hidden" id="crashRocket">🚀</div>
           <div class="crash-burst" id="crashBurst"></div>
@@ -1826,6 +1831,7 @@
     var pts = [];
     var pollTimer = null, checking = false;
     var phase = 'waiting', mult = 1, t0 = Date.now(), myBet = null, lastRoundId = null;
+    var waitEndAt = null; // локальна оцінка моменту старту польоту — щоб секунди тікали рівно щотіку (100мс), а не ривками між відповідями сервера
     // Той самий розподіл, що й CRASH_ODDS на сервері — запасний варіант для
     // демо-режиму (поза ботом) і для моменту до першої відповіді сервера.
     var lastOdds = [
@@ -1872,7 +1878,7 @@
 
     function renderOdds(){
       oddsListEl.innerHTML = lastOdds.map(function(o){
-        var color = o.chance >= 20 ? '#48de9f' : (o.chance >= 8 ? 'var(--cyan)' : (o.chance >= 1 ? 'var(--gold)' : 'var(--pink)'));
+        var color = o.chance >= 20 ? '#48de9f' : (o.chance >= 8 ? 'var(--violet)' : (o.chance >= 1 ? 'var(--gold)' : 'var(--pink)'));
         return '<div class="crash-oddsrow"><span class="om">x' + o.mult.toFixed(2) + '</span><span class="op" style="color:' + color + '">' + o.chance + '%</span></div>';
       }).join('');
     }
@@ -1932,6 +1938,11 @@
 
       if (phase === 'waiting'){
         waitOverlay.classList.add('show');
+        // Синхронізуємось із сервером щоразу, коли приходить відповідь, але
+        // МІЖ відповідями секунди тіче локально (у tick(), кожні 100мс) —
+        // інакше таймер смикається залежно від швидкості мережі/сну хостингу
+        // замість рівного відліку.
+        waitEndAt = Date.now() + (r.time_left || 0) * 1000;
         waitTimerEl.textContent = (r.time_left || 0).toFixed(1) + 'с';
         crashMultEl.className = 'crash-mult';
         crashMultEl.textContent = 'x1.00';
@@ -2048,6 +2059,9 @@
         var m = Math.round((1 + el * 0.12) * 100) / 100;
         crashMultEl.textContent = 'x' + m.toFixed(2);
         drawPoint(el, m);
+      } else if (phase === 'waiting' && waitEndAt){
+        var remain = Math.max(0, (waitEndAt - Date.now()) / 1000);
+        waitTimerEl.textContent = remain.toFixed(1) + 'с';
       }
       if (liveMode){
         if (!checking){
