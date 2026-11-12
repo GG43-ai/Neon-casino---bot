@@ -291,16 +291,16 @@ def admin_auth():
 # чате бота). Источник истины по деньгам — всегда таблица active_games +
 # атомарные spend()/add_balance(), это лишь оперативное состояние раунда.
 web_mines_games = {}
-web_crash_games = {}
 WEB_GAME_LOCK = threading.Lock()
 
 # Якщо раунд "зависає" (втрачене з'єднання, закритий застосунок, обірваний
 # запит тощо), запис у словнику ніколи сам не зникає, і гравця назавжди
 # блокує "активна гра вже є". Тому перед новою ставкою ми прибираємо
-# застарілі записи: Crash триває щонайбільше ~11.4с (до x100), тож 30с —
-# великий запас; Mines темп задає сам гравець, тож поріг довший.
+# застарілі записи. Mines темп задає сам гравець, тож поріг довгий; Crash
+# більше не має власної staleness-логіки — спільний раунд сам обертається
+# по часових мітках (див. _crash_state_locked), незалежно від того, чи
+# хтось узагалі опитує сервер.
 MINES_STALE_SEC = 900
-CRASH_STALE_SEC = 30
 
 
 def _clear_stale_games(uid):
@@ -309,10 +309,26 @@ def _clear_stale_games(uid):
     if mg and time.time() - mg.get("started_at", 0) > MINES_STALE_SEC:
         web_mines_games.pop(uid, None)
         call_async(clear_active_game(uid))
-    cg = web_crash_games.get(uid)
-    if cg and time.time() - cg.get("start", 0) > CRASH_STALE_SEC:
-        web_crash_games.pop(uid, None)
-        call_async(clear_active_game(uid))
+
+
+# ---------- CRASH: один спільний раунд на всіх (онлайн із реальними
+# гравцями), а не приватна гра на кожного. Фази обчислюються ЛІНИВО з
+# часових міток (як і раніше рахувався момент вибуху для одного гравця) —
+# без фонового таск-лупу, щоб не ламалось при рестарті процесу: будь-який
+# запит від будь-якого гравця сам "довертає" раунд до актуальної фази. ----
+CRASH_WAIT_SEC = 7     # скільки триває збір ставок перед стартом польоту
+CRASH_SHOW_SEC = 4     # скільки показуємо результат вибуху перед новим раундом
+
+# crash_point виставляється нижче, одразу після визначення _crash_target_point()
+# (її ще нема в цьому місці файлу) — через _crash_round_init().
+_crash_round = {
+    "id": 1,
+    "phase_start": time.time(),
+    "crash_point": None,
+    "bets": {},          # uid -> {"name","bet","cashout_mult","reward"}
+    "losses_cleared": False,
+}
+
 
 MIN_BET = int(os.getenv("MINI_APP_MIN_BET", "10"))
 # Бизнес-лимита на максимальную ставку больше нет — "Усе" должно реально
@@ -477,6 +493,60 @@ def _crash_target_point():
     return round(random.uniform(2.01, 5.01), 2)
 
 
+_crash_round["crash_point"] = _crash_target_point()
+
+
+def _crash_state_locked():
+    """Викликати ВСЕРЕДИНІ WEB_GAME_LOCK. Ліниво "довертає" спільний раунд
+    до актуальної фази за часовими мітками (без фонового таск-лупу — так
+    само, як і раніше рахувався момент вибуху для одного гравця) й повертає
+    (phase, payload), де phase — 'waiting' / 'flying' / 'crashed'."""
+    now = time.time()
+    r = _crash_round
+    elapsed = now - r["phase_start"]
+
+    if elapsed < CRASH_WAIT_SEC:
+        return "waiting", {"time_left": round(CRASH_WAIT_SEC - elapsed, 1)}
+
+    flying_elapsed = elapsed - CRASH_WAIT_SEC
+    mult = _crash_mult_at(flying_elapsed)
+    if mult < r["crash_point"]:
+        return "flying", {"mult": mult}
+
+    # Вибухнуло. Хто не встиг забрати — програв ставку; закриваємо їм
+    # active_games одразу тут (рівно один раз на раунд — losses_cleared),
+    # а не покладаючись на те, що кожен клієнт сам підтвердить програш:
+    # хтось міг просто закрити застосунок саме в момент вибуху.
+    if not r["losses_cleared"]:
+        for uid, bet in r["bets"].items():
+            if bet["cashout_mult"] is None:
+                call_async(clear_active_game(uid))
+        r["losses_cleared"] = True
+
+    crash_elapsed = flying_elapsed - (r["crash_point"] - 1) / 0.12
+    if crash_elapsed < CRASH_SHOW_SEC:
+        return "crashed", {"crash_point": r["crash_point"], "time_left": round(CRASH_SHOW_SEC - crash_elapsed, 1)}
+
+    # Час нового раунду.
+    r["id"] += 1
+    r["phase_start"] = now
+    r["crash_point"] = _crash_target_point()
+    r["bets"] = {}
+    r["losses_cleared"] = False
+    return "waiting", {"time_left": CRASH_WAIT_SEC}
+
+
+def _crash_uid_active(uid):
+    """True, якщо в поточному раунді Краша в користувача ще НЕ завершена
+    ставка (ще не забрав і раунд ще не вибухнув) — для взаємовиключення з
+    Мінами (не можна тримати дві незакриті ставки одночасно)."""
+    bet = _crash_round["bets"].get(uid)
+    if not bet or bet["cashout_mult"] is not None:
+        return False
+    phase, _ = _crash_state_locked()
+    return phase in ("waiting", "flying")
+
+
 @app.route("/api/login/start", methods=["POST"])
 def api_login_start():
     token = new_web_login_token()
@@ -518,9 +588,10 @@ def api_me():
     next_bonus_at = last_bonus + 86400
     border, theme = call_async(get_equipped(uid))
     nickname = call_async(get_nickname(uid))
-    # Прибираємо застарілі web_mines_games/web_crash_games тут теж — фронтенд
-    # опитує /api/me при кожному переході між сторінками, тож "залипла" гра
-    # зникає сама набагато раніше, ніж гравець встигне тицьнути нову ставку.
+    # Прибираємо застарілі web_mines_games тут теж — фронтенд опитує /api/me
+    # при кожному переході між сторінками, тож "залипла" гра зникає сама
+    # набагато раніше, ніж гравець встигне тицьнути нову ставку. Crash сюди
+    # не входить — спільний раунд сам обертається по часових мітках.
     with WEB_GAME_LOCK:
         _clear_stale_games(uid)
     return {
@@ -1125,7 +1196,7 @@ def api_mines_bet():
 
     with WEB_GAME_LOCK:
         _clear_stale_games(uid)
-        if uid in web_mines_games or uid in web_crash_games:
+        if uid in web_mines_games or _crash_uid_active(uid):
             return {"error": "active_game"}, 409
 
         if not call_async(spend(uid, amount)):
@@ -1185,8 +1256,20 @@ def api_mines_cashout():
     return {"reward": reward, "mult": game["mult"], "balance": balance}
 
 
+def _crash_player_row(pid, bet, uid):
+    return {
+        "name": bet["name"], "bet": bet["bet"],
+        "cashout_mult": bet["cashout_mult"], "reward": bet["reward"],
+        "you": pid == uid,
+    }
+
+
 @app.route("/api/crash/bet", methods=["POST"])
 def api_crash_bet():
+    """Один спільний раунд на всіх (а не приватна гра на кожного): ставки
+    приймаються лише у фазі 'waiting', після чого всі, хто встиг поставити,
+    летять в одному й тому самому раунді з однаковим множником і бачать
+    одне одного в списку гравців."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -1197,58 +1280,66 @@ def api_crash_bet():
 
     with WEB_GAME_LOCK:
         _clear_stale_games(uid)
-        if uid in web_mines_games or uid in web_crash_games:
+        if uid in web_mines_games:
             return {"error": "active_game"}, 409
+        phase, info = _crash_state_locked()
+        if phase != "waiting":
+            return {"error": "round_in_progress"}, 409
+        if uid in _crash_round["bets"]:
+            return {"error": "already_bet"}, 409
 
         if not call_async(spend(uid, amount)):
             return {"error": "insufficient_funds"}, 400
 
-        crash_point = _crash_target_point()
-        web_crash_games[uid] = {"start": time.time(), "crash_point": crash_point, "bet": amount}
+        nickname = call_async(get_nickname(uid))
+        name = (nickname or "").strip() or (("@" + username) if username else f"Гравець {uid}")
+        _crash_round["bets"][uid] = {"name": name, "bet": amount, "cashout_mult": None, "reward": None}
         call_async(track_active_game(uid, "crash_webapp", uid, amount))
 
     balance = call_async(get_user(uid))[2]
-    return {"bet": amount, "balance": balance}
+    return {"balance": balance, "time_left": info["time_left"]}
 
 
 @app.route("/api/crash/status", methods=["POST"])
 def api_crash_status():
-    """Фронтенд опитує це під час польоту, щоб вибух показувався одразу,
-    поки гра ще триває, а не лише в момент натискання "Забрати". Важливо:
-    цей ендпоінт лише ПІДГЛЯДАЄ стан і нічого не видаляє з web_crash_games —
-    раніше він сам забирав (pop) гру при виявленні краху, і якщо гравець
-    саме в цю мить тиснув "Забрати", запит кешауту приходив вже на порожнє
-    місце й бачив помилку "гру вже завершено" замість чесного "вибух"/
-    виграшу. Єдине місце, що реально завершує раунд (pop) — /api/crash/cashout."""
+    """Опитується часто (і без активної ставки теж — щоб було видно сам
+    раунд і чужі ставки навіть до того, як приєднався сам гравець). Нічого
+    не списує й не видаляє — лише читає поточний стан спільного раунду."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
     uid, _ = auth
 
     with WEB_GAME_LOCK:
-        game = web_crash_games.get(uid)
-        if not game:
-            return {"error": "no_game"}, 409
+        phase, info = _crash_state_locked()
+        r = _crash_round
+        your_bet = r["bets"].get(uid)
+        players = [_crash_player_row(pid, b, uid) for pid, b in r["bets"].items()]
+        players.sort(key=lambda p: p["bet"], reverse=True)
+        payload = {
+            "phase": phase,
+            "round_id": r["id"],
+            "players": players,
+            "your_bet": (
+                {"bet": your_bet["bet"], "cashout_mult": your_bet["cashout_mult"], "reward": your_bet["reward"]}
+                if your_bet else None
+            ),
+        }
+        payload.update(info)
 
-        elapsed = time.time() - game["start"]
-        current_mult = _crash_mult_at(elapsed)
-        if current_mult >= game["crash_point"]:
-            return {"crashed": True, "crash_point": game["crash_point"]}
-
-    return {"crashed": False, "mult": current_mult}
+    return payload
 
 
 @app.route("/api/crash/cashout", methods=["POST"])
 def api_crash_cashout():
     """claimed_mult — множник, який гравець РЕАЛЬНО бачив на екрані в
     момент натискання "Забрати". Поки запит летить мережею до сервера,
-    реальний (серверний) час продовжує йти, тож current_mult тут завжди
-    трохи БІЛЬШИЙ за те, що гравець устиг побачити — якби платили за
-    current_mult, виходило б "показало 1.23, а зарахувало 1.34". Платимо
-    за min(claimed_mult, current_mult): ніколи не більше реально
-    досягнутого (інакше нечесний клієнт міг би просто надіслати
-    величезне число), і ніколи не більше того, що гравець бачив —
-    тобто рівно те число, яке було на екрані в момент кліку."""
+    реальний (серверний) час продовжує йти, тож поточний множник тут завжди
+    трохи БІЛЬШИЙ за те, що гравець устиг побачити — якби платили за ним,
+    виходило б "показало 1.23, а зарахувало 1.34". Платимо за
+    min(claimed_mult, поточний): ніколи не більше реально досягнутого
+    (інакше нечесний клієнт міг би надіслати величезне число), і ніколи не
+    більше того, що гравець бачив — рівно те число, яке було на екрані."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -1259,24 +1350,30 @@ def api_crash_cashout():
         claimed_mult = None
 
     with WEB_GAME_LOCK:
-        game = web_crash_games.pop(uid, None)
-        if not game:
-            return {"error": "no_game"}, 409
+        phase, info = _crash_state_locked()
+        bet_info = _crash_round["bets"].get(uid)
+        if not bet_info:
+            return {"error": "no_bet"}, 409
+        if bet_info["cashout_mult"] is not None:
+            return {"error": "already_cashed"}, 409
 
-        elapsed = time.time() - game["start"]
-        current_mult = _crash_mult_at(elapsed)
-        if current_mult >= game["crash_point"]:
-            call_async(clear_active_game(uid))
-            return {"crashed": True, "crash_point": game["crash_point"]}
+        if phase != "flying":
+            # Раунд, у якому була ставка, уже вибухнув (і _crash_state_locked
+            # сам закрив active_games для всіх, хто не встиг забрати) —
+            # ставка програна, виплати немає.
+            return {"crashed": True, "crash_point": _crash_round["crash_point"]}
 
+        current_mult = info["mult"]
+        pay_mult = current_mult
+        if claimed_mult is not None:
+            pay_mult = max(1.0, min(float(claimed_mult), current_mult))
+
+        reward = int(bet_info["bet"] * pay_mult)
+        bet_info["cashout_mult"] = pay_mult
+        bet_info["reward"] = reward
+        call_async(add_balance(uid, reward))
         call_async(clear_active_game(uid))
 
-    pay_mult = current_mult
-    if claimed_mult is not None:
-        pay_mult = max(1.0, min(float(claimed_mult), current_mult))
-
-    reward = int(game["bet"] * pay_mult)
-    call_async(add_balance(uid, reward))
     balance = call_async(get_user(uid))[2]
     return {"reward": reward, "mult": pay_mult, "balance": balance}
 

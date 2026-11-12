@@ -113,6 +113,27 @@
   @keyframes flash{0%{opacity:.55}100%{opacity:0}}
   #crashSvg{position:absolute;inset:0;width:100%;height:100%}
 
+  .crash-wait{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(10,7,20,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .crash-wait.show{display:flex}
+  .crash-waitlabel{font-size:.74rem;color:var(--dim);letter-spacing:.04em;text-transform:uppercase}
+  .crash-waittimer{font-family:'Unbounded',sans-serif;font-weight:800;font-size:2.3rem;color:var(--gold);text-shadow:0 0 18px rgba(255,195,66,.45)}
+
+  .crash-players{margin-top:14px;background:var(--panel);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:12px 14px;flex:none}
+  .crash-playershead{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
+  .crash-playerscount{background:var(--bg2);border-radius:8px;padding:2px 8px;font-family:'Unbounded',sans-serif;font-weight:700;color:var(--text)}
+  .crash-playerslist{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+  .crash-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:11px;background:var(--bg2);border:1px solid rgba(255,255,255,.06);font-size:.72rem;transition:border-color .2s,background .2s}
+  .crash-row .crname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%;color:var(--text)}
+  .crash-row .crbet{color:var(--dim);font-family:'Unbounded',sans-serif;font-size:.68rem}
+  .crash-row .crstatus{font-family:'Unbounded',sans-serif;font-weight:700;font-size:.7rem;white-space:nowrap}
+  .crash-row.you{border-color:rgba(255,106,213,.4);background:rgba(255,106,213,.06)}
+  .crash-row.flying .crstatus{color:var(--cyan)}
+  .crash-row.won{border-color:rgba(72,222,159,.4)}
+  .crash-row.won .crstatus{color:#48de9f}
+  .crash-row.lost{opacity:.6}
+  .crash-row.lost .crstatus{color:var(--pink)}
+  .crash-playersempty{text-align:center;color:var(--dim);font-size:.72rem;padding:10px 0}
+
   /* MINES */
   .mgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
   .tile-m{aspect-ratio:1;border-radius:10px;background:#1d1232;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s}
@@ -601,7 +622,7 @@
     <section class="page" data-page="crash">
       <div class="pagebody">
         <h2 class="gametitle" data-i18n="crash_title">Краш</h2>
-        <p class="gamesub" data-i18n="crash_sub">Забери множник до вибуху</p>
+        <p class="gamesub" data-i18n="crash_sub">Один раунд на всіх — забери множник до вибуху</p>
         <div class="crash-stage">
           <div class="crash-grid"></div>
           <svg id="crashSvg" viewBox="0 0 300 190" preserveAspectRatio="none">
@@ -610,8 +631,16 @@
           </svg>
           <div class="crash-flash" id="crashFlash"></div>
           <div class="crash-mult" id="crashMult">x1.00</div>
+          <div class="crash-wait" id="crashWait">
+            <div class="crash-waitlabel" data-i18n="crash_wait_label">Старт раунду</div>
+            <div class="crash-waittimer" id="crashWaitTimer">7.0с</div>
+          </div>
         </div>
-        <div class="msg" id="crashMsg">Обери ставку й стартуй</div>
+        <div class="msg" id="crashMsg">Обери ставку й чекай старту</div>
+        <div class="crash-players">
+          <div class="crash-playershead"><span data-i18n="crash_players_title">Гравці раунду</span><span class="crash-playerscount" id="crashPlayersCount">0</span></div>
+          <div class="crash-playerslist" id="crashPlayersList"></div>
+        </div>
       </div>
       <div class="betbar" id="crashBetbar"></div>
     </section>
@@ -1069,7 +1098,28 @@
     nav_profile:{ua:'Профіль',ru:'Профиль',en:'Profile'},
     games_sub:{ua:'Обери гру',ru:'Выбери игру',en:'Pick a game'},
     crash_title:{ua:'Краш',ru:'Краш',en:'Crash'},
-    crash_sub:{ua:'Забери множник до вибуху',ru:'Забери множитель до взрыва',en:'Cash out before it busts'},
+    crash_sub:{ua:'Один раунд на всіх — забери множник до вибуху',ru:'Один раунд на всех — забери множитель до взрыва',en:'One shared round — cash out before it busts'},
+    crash_wait_label:{ua:'Старт раунду',ru:'Старт раунда',en:'Round starts in'},
+    crash_players_title:{ua:'Гравці раунду',ru:'Игроки раунда',en:'Players this round'},
+    crash_no_players:{ua:'Поки ніхто не поставив',ru:'Пока никто не поставил',en:'No bets yet'},
+    crash_status_flying:{ua:'у польоті',ru:'в полёте',en:'flying'},
+    crash_status_lost:{ua:'💥 програв',ru:'💥 проиграл',en:'💥 lost'},
+    crash_you:{ua:'Ти',ru:'Ты',en:'You'},
+    crash_msg_waiting:{ua:'Онлайн-раунд — постав і чекай старту',ru:'Онлайн-раунд — поставь и жди старта',en:'Online round — place a bet and wait for liftoff'},
+    crash_msg_waiting_bet:{ua:'Ставку прийнято — чекай старту',ru:'Ставка принята — жди старта',en:'Bet placed — waiting for liftoff'},
+    crash_btn_waiting:{ua:'Чекаємо старту…',ru:'Ждём старта…',en:'Waiting…'},
+    crash_btn_bet:{ua:'Поставити',ru:'Поставить',en:'Place bet'},
+    crash_msg_flying:{ua:'У польоті — забирай вчасно!',ru:'В полёте — забирай вовремя!',en:'Flying — cash out in time!'},
+    crash_btn_cashout:{ua:'Забрати',ru:'Забрать',en:'Cash out'},
+    crash_msg_cashed:{ua:'Забрано x{mult} · +{reward} монет',ru:'Забрано x{mult} · +{reward} монет',en:'Cashed out x{mult} · +{reward} coins'},
+    crash_btn_flying_spectate:{ua:'Летить…',ru:'Летит…',en:'Flying…'},
+    crash_msg_spectate:{ua:'Раунд уже летить — наступний скоро',ru:'Раунд уже летит — следующий скоро',en:'Round already flying — next one soon'},
+    crash_msg_lost:{ua:'Вибух на x{point} — ставку втрачено',ru:'Взрыв на x{point} — ставка проиграна',en:'Busted at x{point} — bet lost'},
+    crash_msg_round_over:{ua:'Вибух на x{point}',ru:'Взрыв на x{point}',en:'Busted at x{point}'},
+    crash_btn_next:{ua:'Наступний раунд…',ru:'Следующий раунд…',en:'Next round…'},
+    crash_btn_cashing:{ua:'Забираю…',ru:'Забираю…',en:'Cashing out…'},
+    crash_err_funds:{ua:'Недостатньо монет',ru:'Недостаточно монет',en:'Not enough coins'},
+    crash_err_bet:{ua:'Не вдалось поставити',ru:'Не удалось поставить',en:'Could not place bet'},
     mines_title:{ua:'Міни',ru:'Мины',en:'Mines'},
     mines_sub:{ua:'Кожен кристал — +0.25x',ru:'Каждый кристалл — +0.25x',en:'Each gem — +0.25x'},
     roulette_title:{ua:'Рулетка',ru:'Рулетка',en:'Roulette'},
@@ -1690,132 +1740,246 @@
     };
   }
 
-  /* ================= CRASH ================= */
+  /* ================= CRASH (один спільний раунд на всіх) ================= */
   (function(){
     var crashMultEl = document.getElementById('crashMult');
     var crashMsg = document.getElementById('crashMsg');
     var flash = document.getElementById('crashFlash');
     var line = document.getElementById('crashLine');
     var dot = document.getElementById('crashDot');
-    var flying = false, timer = null, mult = 1, localPoint = 1, pts = [];
-    var bar = makeBetBar(document.getElementById('crashBetbar'), 100, startCrash, 'Старт');
+    var waitOverlay = document.getElementById('crashWait');
+    var waitTimerEl = document.getElementById('crashWaitTimer');
+    var playersList = document.getElementById('crashPlayersList');
+    var playersCountEl = document.getElementById('crashPlayersCount');
+    var bar = makeBetBar(document.getElementById('crashBetbar'), 100, placeBet, t('crash_btn_bet'));
 
-    function demoPoint(){
+    var pts = [];
+    var pollTimer = null, checking = false;
+    var phase = 'waiting', mult = 1, t0 = Date.now(), myBet = null, lastRoundId = null;
+
+    function resetLine(){ pts=[[0,190]]; line.setAttribute('points','0,190'); dot.setAttribute('cx',0); dot.setAttribute('cy',190); }
+    function drawPoint(el, m){
+      // Корінь замість прямої лінії: невеликі множники (де тепер і падає
+      // більшість раундів, 1.01-1.21x) дають помітний стрибок лінії вгору
+      // одразу ж, а не ледь помітний нахил — це суто візуальний масштаб
+      // графіка, саме число m (а отже й виплата) не змінюється жодним чином.
+      var riseProgress = Math.min(1, Math.sqrt(Math.max(0, m-1)/2));
+      var x = Math.min(300, el*12), y = 190 - riseProgress*180;
+      pts.push([x,y]);
+      line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
+      dot.setAttribute('cx',x); dot.setAttribute('cy',y);
+    }
+
+    function renderPlayers(list, roundPhase){
+      playersCountEl.textContent = list.length;
+      if (!list.length){
+        playersList.innerHTML = '<div class="crash-playersempty">'+t('crash_no_players')+'</div>';
+        return;
+      }
+      playersList.innerHTML = list.map(function(p){
+        var cls = 'crash-row' + (p.you ? ' you' : '');
+        var status;
+        if (p.cashout_mult != null){
+          cls += ' won';
+          status = '+' + p.reward + ' · x' + p.cashout_mult.toFixed(2);
+        } else if (roundPhase === 'crashed'){
+          cls += ' lost';
+          status = t('crash_status_lost');
+        } else {
+          cls += ' flying';
+          status = t('crash_status_flying');
+        }
+        var name = p.you ? t('crash_you') : p.name;
+        return '<div class="'+cls+'"><span class="crname">'+esc(name)+'</span><span class="crbet">'+p.bet+' 💰</span><span class="crstatus">'+status+'</span></div>';
+      }).join('');
+    }
+
+    // Єдина точка, що перемальовує UI — і для живих відповідей сервера, і
+    // для локального демо-раунду (поза Telegram), тож код рендера не
+    // дублюється між двома режимами.
+    function applyStatus(r){
+      if (r.round_id !== lastRoundId){
+        lastRoundId = r.round_id;
+        resetLine();
+      }
+      var prevPhase = phase;
+      phase = r.phase;
+      myBet = r.your_bet || null;
+
+      if (phase === 'waiting'){
+        waitOverlay.classList.add('show');
+        waitTimerEl.textContent = (r.time_left || 0).toFixed(1) + 'с';
+        crashMultEl.className = 'crash-mult';
+        crashMultEl.textContent = 'x1.00';
+        if (myBet){
+          crashMsg.textContent = t('crash_msg_waiting_bet');
+          bar.setCashMode(false, t('crash_btn_waiting'));
+          bar.setPlaying(true, t('crash_btn_waiting'));
+        } else {
+          crashMsg.textContent = t('crash_msg_waiting');
+          bar.setCashMode(false, t('crash_btn_bet'));
+          bar.setPlaying(false, t('crash_btn_bet'));
+          bar.playBtn.onclick = function(){ placeBet(bar.amount()); };
+        }
+      } else if (phase === 'flying'){
+        if (prevPhase === 'waiting') haptic();
+        waitOverlay.classList.remove('show');
+        if (typeof r.mult === 'number'){
+          var serverElapsed = (r.mult - 1) / 0.12;
+          t0 = Date.now() - serverElapsed * 1000;
+          mult = r.mult;
+          crashMultEl.textContent = 'x' + mult.toFixed(2);
+        }
+        if (myBet && myBet.cashout_mult == null){
+          crashMsg.textContent = t('crash_msg_flying');
+          bar.setCashMode(true, t('crash_btn_cashout'));
+          bar.setPlaying(true, t('crash_btn_cashout'));
+          bar.playBtn.onclick = cashOut;
+        } else if (myBet){
+          crashMsg.textContent = t('crash_msg_cashed').replace('{mult}', myBet.cashout_mult.toFixed(2)).replace('{reward}', myBet.reward);
+          bar.setCashMode(false, t('crash_btn_flying_spectate'));
+          bar.setPlaying(true, t('crash_btn_flying_spectate'));
+        } else {
+          crashMsg.textContent = t('crash_msg_spectate');
+          bar.setCashMode(false, t('crash_btn_flying_spectate'));
+          bar.setPlaying(true, t('crash_btn_flying_spectate'));
+        }
+      } else if (phase === 'crashed'){
+        if (prevPhase !== 'crashed'){
+          crashMultEl.className = 'crash-mult boom';
+          flash.classList.remove('hit'); void flash.offsetWidth; flash.classList.add('hit');
+          haptic(myBet && myBet.cashout_mult != null ? 'ok' : 'fail');
+        }
+        waitOverlay.classList.remove('show');
+        var point = (r.crash_point || mult);
+        crashMultEl.textContent = 'x' + point.toFixed(2);
+        if (myBet && myBet.cashout_mult != null){
+          crashMsg.textContent = t('crash_msg_cashed').replace('{mult}', myBet.cashout_mult.toFixed(2)).replace('{reward}', myBet.reward);
+        } else if (myBet){
+          crashMsg.textContent = t('crash_msg_lost').replace('{point}', point.toFixed(2));
+        } else {
+          crashMsg.textContent = t('crash_msg_round_over').replace('{point}', point.toFixed(2));
+        }
+        bar.setCashMode(false, t('crash_btn_next'));
+        bar.setPlaying(true, t('crash_btn_next'));
+      }
+
+      renderPlayers(r.players || [], phase);
+    }
+
+    async function placeBet(amount){
+      if (phase !== 'waiting' || myBet) return;
+      if (liveMode){
+        try {
+          var r = await api('/api/crash/bet', {amount: amount});
+          setBalance(r.balance);
+          haptic();
+        } catch(e){
+          crashMsg.textContent = (e && e.error === 'insufficient_funds') ? t('crash_err_funds') : t('crash_err_bet');
+          haptic('fail');
+        }
+      } else {
+        if (balance < amount){ crashMsg.textContent = t('crash_err_funds'); return; }
+        setBalance(balance - amount);
+        demo.bet = {bet: amount, cashout_mult: null, reward: null};
+        haptic();
+      }
+    }
+
+    async function cashOut(){
+      if (phase !== 'flying' || !myBet || myBet.cashout_mult != null) return;
+      // Миттєвий відгук на клік, не чекаючи мережі: гравець мусить одразу
+      // побачити, що натискання спрацювало, особливо якщо хостинг щойно
+      // прокинувся після сну.
+      bar.setPlaying(true, t('crash_btn_cashing'));
+      if (liveMode){
+        var shownMult = mult; // те саме число, яке гравець бачив на екрані в момент кліку
+        try {
+          var r = await api('/api/crash/cashout', {claimed_mult: shownMult});
+          if (!r.crashed){ setBalance(r.balance); haptic('ok'); }
+          // Фінальний напис/статус (виграш чи таки вибух) підхопить
+          // наступний тік опитування — applyStatus сам усе перемалює.
+        } catch(e){}
+      } else {
+        var reward = Math.floor(demo.bet.bet * mult);
+        demo.bet.cashout_mult = mult;
+        demo.bet.reward = reward;
+        setBalance(balance + reward);
+        haptic('ok');
+      }
+    }
+
+    function syncStatus(){
+      return api('/api/crash/status', {}).then(applyStatus).catch(function(){});
+    }
+
+    function tick(){
+      if (phase === 'flying'){
+        var el = (Date.now() - t0) / 1000;
+        var m = Math.round((1 + el * 0.12) * 100) / 100;
+        crashMultEl.textContent = 'x' + m.toFixed(2);
+        drawPoint(el, m);
+      }
+      if (liveMode){
+        if (!checking){
+          checking = true;
+          syncStatus().then(function(){ checking = false; });
+        }
+      } else {
+        demoTick();
+      }
+    }
+
+    function startLoop(){
+      if (pollTimer) return;
+      if (liveMode) syncStatus(); else demoTick();
+      pollTimer = setInterval(tick, 100);
+    }
+    function stopLoop(){
+      if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    // ---- ДЕМО-режим (поза Telegram, без сервера): імітує той самий
+    // waiting/flying/crashed цикл локально, через ту саму applyStatus(), щоб
+    // сторінку можна було побачити й поза ботом без дублювання UI-логіки. ----
+    function demoCrashPoint(){
       var r = Math.random()*100;
       if (r<65) return 1.05+Math.random()*0.25;
       if (r<85) return 1.31+Math.random()*0.29;
       if (r<95) return 1.61+Math.random()*0.59;
       return 2.21+Math.random()*1.29;
     }
-    function resetLine(){ pts=[[0,190]]; line.setAttribute('points','0,190'); dot.setAttribute('cx',0); dot.setAttribute('cy',190); }
-
-    async function startCrash(amount){
-      if (flying) return;
-      if (!liveMode && balance < amount){ crashMsg.textContent='Недостатньо монет'; return; }
-      if (liveMode){
-        try { var rb = await api('/api/crash/bet', {amount: amount}); setBalance(rb.balance); }
-        catch(e){ crashMsg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Активна гра вже є'; return; }
-      } else { setBalance(balance - amount); localPoint = demoPoint(); }
-
-      flying = true; mult = 1; resetLine();
-      bar.setCashMode(true, 'Забрати'); bar.setPlaying(true, 'Забрати');
-      bar.playBtn.onclick = cashout;
-      crashMsg.textContent = 'У польоті...';
-      crashMultEl.className = 'crash-mult'; crashMultEl.textContent = 'x1.00';
-      haptic();
-
-      var t0 = Date.now();
-      var tick = 0, checking = false;
-      timer = setInterval(function(){
-        var el = (Date.now()-t0)/1000;
-        mult = Math.round((1+el*0.12)*100)/100;
-        crashMultEl.textContent = 'x'+mult.toFixed(2);
-        // Корінь замість прямої лінії: невеликі множники (де тепер і падає
-        // більшість раундів, 1.01-1.21x) дають помітний стрибок лінії вгору
-        // одразу ж, а не ледь помітний нахил — x1.5 вже виглядає як солідний
-        // підйом, хоча саме число mult (а отже й виплата) не змінюється
-        // жодним чином, це суто візуальний масштаб графіка.
-        var riseProgress = Math.min(1, Math.sqrt(Math.max(0, mult-1)/2));
-        var x = Math.min(300, el*12), y = 190 - riseProgress*180;
-        pts.push([x,y]);
-        line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
-        dot.setAttribute('cx',x); dot.setAttribute('cy',y);
-        if (!liveMode && mult >= localPoint){ crash(localPoint); return; }
-        // Опитуємо сервер щотик (~10 разів на секунду) — без штучного
-        // пропуску тіків, щоб вибух і кешаут відчувались миттєво. Робимо
-        // це з двох причин: 1) вибух видно одразу, поки гра ще триває, а
-        // не лише по кліку "Забрати"; 2) підтягуємо локальний годинник
-        // (t0) під реальний серверний — інакше анімація стартує на
-        // клієнті із запізненням (після round-trip запиту на ставку) і
-        // завжди "відстає" від сервера. /api/crash/status лише ПІДГЛЯДАЄ
-        // стан (нічого не видаляє), тому навіть якщо він і кешаут
-        // прилетять на сервер практично одночасно — кешаут завжди бачить
-        // гру і чесно відповідає виграшем або вибухом, а не "гру вже
-        // завершено".
-        tick++;
-        if (liveMode && !checking){
-          checking = true;
-          api('/api/crash/status', {}).then(function(r){
-            checking = false;
-            if (r.crashed){ crash(r.crash_point); return; }
-            if (typeof r.mult === 'number'){
-              var serverElapsed = (r.mult - 1) / 0.12;
-              t0 = Date.now() - serverElapsed*1000;
-              mult = r.mult;
-            }
-          }).catch(function(){ checking = false; });
+    var demo = { phase:'waiting', phaseStart: Date.now(), crashPoint: demoCrashPoint(), bet: null, roundId: 1 };
+    function demoPlayers(){ return demo.bet ? [{name:t('crash_you'), bet:demo.bet.bet, cashout_mult:demo.bet.cashout_mult, reward:demo.bet.reward, you:true}] : []; }
+    function demoTick(){
+      var elapsed = (Date.now() - demo.phaseStart) / 1000;
+      if (demo.phase === 'waiting' && elapsed >= 7){
+        demo.phase = 'flying'; demo.phaseStart = Date.now(); elapsed = 0;
+      }
+      if (demo.phase === 'flying'){
+        var m = Math.round((1 + elapsed*0.12)*100)/100;
+        if (m >= demo.crashPoint){ demo.phase = 'crashed'; demo.phaseStart = Date.now(); elapsed = 0; }
+        else { applyStatus({phase:'flying', mult:m, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()}); return; }
+      }
+      if (demo.phase === 'crashed'){
+        if (elapsed >= 4){
+          demo.phase = 'waiting'; demo.phaseStart = Date.now(); demo.crashPoint = demoCrashPoint(); demo.bet = null; demo.roundId++;
+          applyStatus({phase:'waiting', time_left:7, round_id:demo.roundId, your_bet:null, players:[]});
+        } else {
+          applyStatus({phase:'crashed', crash_point:demo.crashPoint, time_left:4-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()});
         }
-      }, 100);
-    }
-
-    function crash(point){
-      if (!flying) return;
-      clearInterval(timer); flying=false;
-      crashMultEl.className='crash-mult boom';
-      crashMsg.textContent='Вибух на x'+point.toFixed(2)+' — ставку втрачено';
-      flash.classList.remove('hit'); void flash.offsetWidth; flash.classList.add('hit');
-      bar.setCashMode(false,'Старт'); bar.setPlaying(false,'Старт'); bar.playBtn.onclick = function(){ startCrash(bar.amount()); };
-      haptic('fail');
-      if (liveMode){
-        // Програна гра досі лежить у сервера як "активна", поки хтось явно
-        // не підтвердить її завершення — інакше наступна ставка одразу
-        // впирається в "Активна гра вже є" (і так аж до 30-секундного
-        // самоочищення). /api/crash/cashout бачить, що crash_point уже
-        // пройдено, і сам коректно закриває гру без жодної виплати — саме
-        // тому можна сміливо смикнути його тут і ігнорувати відповідь.
-        api('/api/crash/cashout', {}).catch(function(){});
+        return;
+      }
+      if (demo.phase === 'waiting'){
+        applyStatus({phase:'waiting', time_left:7-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()});
       }
     }
 
-    async function cashout(){
-      if (!flying) return;
-      clearInterval(timer); flying=false;
-      // Миттєвий відгук на клік: гравець мусить одразу побачити, що натискання
-      // спрацювало, а не чекати мовчки, поки летить запит на сервер (особливо
-      // якщо хостинг прокидається після сну) — інакше здається, що кнопка
-      // "не реагує", навіть коли насправді все йде як слід.
-      bar.setPlaying(true, 'Забираю...');
-      if (liveMode){
-        // Фіксуємо число, яке гравець бачить на екрані ПРЯМО ЗАРАЗ, в момент
-        // кліку, — те саме, що весь час малював таймер вище. Сервер заплатить
-        // рівно за нього (не більше), навіть якщо поки запит летів мережею,
-        // реальний час на сервері пішов трохи далі вперед.
-        var shownMult = mult;
-        try {
-          var r = await api('/api/crash/cashout', {claimed_mult: shownMult});
-          if (r.crashed){ crash(r.crash_point); return; }
-          setBalance(r.balance);
-          crashMsg.textContent='Забрано x'+r.mult.toFixed(2)+' \u00b7 +'+r.reward+' монет';
-          haptic('ok');
-        } catch(e){ crashMsg.textContent='Гру вже завершено'; }
-      } else {
-        var reward = Math.floor(bar.amount()*mult);
-        setBalance(balance+reward);
-        crashMsg.textContent='Забрано x'+mult.toFixed(2)+' \u00b7 +'+reward+' фішок';
-        haptic('ok');
-      }
-      bar.setCashMode(false,'Старт'); bar.setPlaying(false,'Старт'); bar.playBtn.onclick = function(){ startCrash(bar.amount()); };
-    }
+    var _origGotoCrash = goto;
+    goto = function(name){
+      _origGotoCrash(name);
+      if (name === 'crash') startLoop(); else stopLoop();
+    };
   })();
 
   /* ================= MINES ================= */
