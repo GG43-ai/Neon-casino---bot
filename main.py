@@ -329,6 +329,11 @@ _crash_round = {
     "losses_cleared": False,
 }
 
+# Історія останніх вибухів (найновіший — перший) — чисто для відображення
+# "стрічки" попередніх раундів у клієнті, ні на що інше не впливає.
+_crash_history = []
+CRASH_HISTORY_LEN = 12
+
 
 MIN_BET = int(os.getenv("MINI_APP_MIN_BET", "10"))
 # Бизнес-лимита на максимальную ставку больше нет — "Усе" должно реально
@@ -496,6 +501,28 @@ def _crash_target_point():
 _crash_round["crash_point"] = _crash_target_point()
 
 
+def _crash_odds_table():
+    """Чесна таблиця шансів «долетіти» бодай до вказаного множника, порахована
+    з того ж самого розподілу, за яким реально обирається crash_point у
+    _crash_target_point() (75% 1.01–1.21x, 17% 1.21–2.01x, 8% 2.01–5.01x) —
+    не вигадані числа, а реальна площа під кривою розподілу."""
+    marks = [1.20, 1.50, 2.00, 3.00, 5.00]
+    out = []
+    for m in marks:
+        if m <= 1.21:
+            pct = 75 * (1.21 - m) / 0.20 + 25
+        elif m <= 2.01:
+            pct = 17 * (2.01 - m) / 0.80 + 8
+        else:
+            pct = 8 * (5.01 - m) / 3.00
+        pct = max(0.0, pct)
+        out.append({"mult": m, "chance": round(pct, 1) if pct >= 1 else round(pct, 2)})
+    return out
+
+
+CRASH_ODDS = _crash_odds_table()
+
+
 def _crash_state_locked():
     """Викликати ВСЕРЕДИНІ WEB_GAME_LOCK. Ліниво "довертає" спільний раунд
     до актуальної фази за часовими мітками (без фонового таск-лупу — так
@@ -522,6 +549,8 @@ def _crash_state_locked():
             if bet["cashout_mult"] is None:
                 call_async(clear_active_game(uid))
         r["losses_cleared"] = True
+        _crash_history.insert(0, r["crash_point"])
+        del _crash_history[CRASH_HISTORY_LEN:]
 
     crash_elapsed = flying_elapsed - (r["crash_point"] - 1) / 0.12
     if crash_elapsed < CRASH_SHOW_SEC:
@@ -1324,6 +1353,10 @@ def api_crash_status():
                 {"bet": your_bet["bet"], "cashout_mult": your_bet["cashout_mult"], "reward": your_bet["reward"]}
                 if your_bet else None
             ),
+            # Історія й шанси — статичні/рідко змінювані дані, але їх дешево
+            # віддавати в кожній відповіді, щоб клієнт не робив окремий запит.
+            "history": _crash_history[:CRASH_HISTORY_LEN],
+            "odds": CRASH_ODDS,
         }
         payload.update(info)
 

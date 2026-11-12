@@ -134,6 +134,49 @@
   .crash-row.lost .crstatus{color:var(--pink)}
   .crash-playersempty{text-align:center;color:var(--dim);font-size:.72rem;padding:10px 0}
 
+  /* стрічка останніх раундів */
+  .crash-history{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:2px}
+  .crash-history::-webkit-scrollbar{display:none}
+  .crash-histchip{flex:none;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.68rem;padding:5px 9px;border-radius:9px;background:var(--bg2);border:1px solid rgba(255,255,255,.08);color:var(--dim)}
+  .crash-histchip.mid{color:var(--cyan);border-color:rgba(0,224,255,.35)}
+  .crash-histchip.high{color:var(--gold);border-color:rgba(255,195,66,.5);background:rgba(255,195,66,.08)}
+
+  /* кнопка "шанси" поверх crash-mult */
+  .crash-info{position:absolute;top:14px;right:10px;z-index:4;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:var(--dim);font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .crash-info:active{background:rgba(255,255,255,.16)}
+
+  /* ракета, що летить лінією замість голої крапки */
+  .crash-rocket{position:absolute;left:0;top:100%;font-size:1.1rem;z-index:2;transform:translate(-50%,-50%);filter:drop-shadow(0 0 6px rgba(0,224,255,.7));transition:opacity .2s;will-change:left,top,transform}
+  .crash-rocket.hidden{opacity:0}
+
+  /* глоу й пульс під час польоту, тряска й спалах при вибуху */
+  #crashLine{filter:drop-shadow(0 0 5px rgba(0,224,255,.65))}
+  .crash-stage.boomed #crashLine{filter:drop-shadow(0 0 7px rgba(255,45,120,.75))}
+  .crash-mult.flying{animation:crashPulse .9s ease-in-out infinite}
+  @keyframes crashPulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.07)}}
+  .crash-stage.shake{animation:crashShake .4s ease-out}
+  @keyframes crashShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px) translateY(2px)}40%{transform:translateX(5px) translateY(-2px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+  body.anim-off .crash-mult.flying{animation:none}
+  body.anim-off .crash-stage.shake{animation:none}
+
+  /* частинки при успішному кешауті */
+  .crash-burst{position:absolute;left:50%;top:40%;z-index:5;pointer-events:none}
+  .crash-burst span{position:absolute;left:0;top:0;width:6px;height:6px;border-radius:50%;background:#48de9f;opacity:0;animation:burstFly .7s ease-out forwards}
+  @keyframes burstFly{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--bx),var(--by)) scale(.4)}}
+  body.anim-off .crash-burst{display:none}
+
+  /* модалка шансів */
+  .crash-odds{position:fixed;inset:0;z-index:91;background:rgba(6,4,14,.86);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:24px}
+  .crash-odds.show{display:flex}
+  .crash-oddscard{background:linear-gradient(160deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:20px 18px;display:flex;flex-direction:column;gap:12px;max-width:320px;width:100%;box-shadow:0 0 60px rgba(0,224,255,.18)}
+  .crash-oddstitle{font-family:'Unbounded',sans-serif;font-weight:700;font-size:.9rem}
+  .crash-oddssub{font-size:.72rem;color:var(--dim);margin-top:2px;line-height:1.4}
+  .crash-oddslist{display:flex;flex-direction:column;gap:6px}
+  .crash-oddsrow{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:11px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);font-size:.78rem;font-family:'Unbounded',sans-serif}
+  .crash-oddsrow .om{color:var(--text);font-weight:700}
+  .crash-oddsrow .op{font-weight:700}
+  .crash-oddsclose{padding:12px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.78rem;background:var(--bg2);border:1px solid rgba(255,255,255,.12);color:var(--dim)}
+
   /* MINES */
   .mgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
   .tile-m{aspect-ratio:1;border-radius:10px;background:#1d1232;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s}
@@ -623,14 +666,18 @@
       <div class="pagebody">
         <h2 class="gametitle" data-i18n="crash_title">Краш</h2>
         <p class="gamesub" data-i18n="crash_sub">Один раунд на всіх — забери множник до вибуху</p>
-        <div class="crash-stage">
+        <div class="crash-history" id="crashHistory"></div>
+        <div class="crash-stage" id="crashStage">
           <div class="crash-grid"></div>
           <svg id="crashSvg" viewBox="0 0 300 190" preserveAspectRatio="none">
             <polyline id="crashLine" points="0,190" fill="none" stroke="#19e8ff" stroke-width="3"/>
-            <circle id="crashDot" cx="0" cy="190" r="5" fill="#19e8ff"/>
+            <circle id="crashDot" cx="0" cy="190" r="5" fill="#19e8ff" opacity="0"/>
           </svg>
+          <div class="crash-rocket hidden" id="crashRocket">🚀</div>
+          <div class="crash-burst" id="crashBurst"></div>
           <div class="crash-flash" id="crashFlash"></div>
           <div class="crash-mult" id="crashMult">x1.00</div>
+          <button class="crash-info" id="crashInfoBtn" type="button">ⓘ</button>
           <div class="crash-wait" id="crashWait">
             <div class="crash-waitlabel" data-i18n="crash_wait_label">Старт раунду</div>
             <div class="crash-waittimer" id="crashWaitTimer">7.0с</div>
@@ -1038,6 +1085,17 @@
     </div>
   </div>
 
+  <div class="crash-odds" id="crashOdds">
+    <div class="crash-oddscard">
+      <div>
+        <div class="crash-oddstitle" data-i18n="crash_odds_title">Шанси долетіти</div>
+        <div class="crash-oddssub" data-i18n="crash_odds_sub">Реальний розподіл вибуху — чесно, без прихованих шансів</div>
+      </div>
+      <div class="crash-oddslist" id="crashOddsList"></div>
+      <button class="crash-oddsclose" id="crashOddsCloseBtn" data-i18n="crash_odds_close">Закрити</button>
+    </div>
+  </div>
+
   <nav class="navbar" id="navbar">
     <div class="navslide" id="navSlide"></div>
     <button class="navbtn active" data-goto="home"><svg viewBox="0 0 24 24" class="ic"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg><span data-i18n="nav_home">Головна</span></button>
@@ -1102,6 +1160,10 @@
     crash_wait_label:{ua:'Старт раунду',ru:'Старт раунда',en:'Round starts in'},
     crash_players_title:{ua:'Гравці раунду',ru:'Игроки раунда',en:'Players this round'},
     crash_no_players:{ua:'Поки ніхто не поставив',ru:'Пока никто не поставил',en:'No bets yet'},
+    crash_history_title:{ua:'Останні раунди',ru:'Последние раунды',en:'Recent rounds'},
+    crash_odds_title:{ua:'Шанси долетіти',ru:'Шансы долететь',en:'Odds to reach'},
+    crash_odds_sub:{ua:'Реальний розподіл вибуху — чесно, без прихованих шансів',ru:'Реальное распределение взрыва — честно, без скрытых шансов',en:'The real crash distribution — no hidden odds'},
+    crash_odds_close:{ua:'Закрити',ru:'Закрыть',en:'Close'},
     crash_status_flying:{ua:'у польоті',ru:'в полёте',en:'flying'},
     crash_status_lost:{ua:'💥 програв',ru:'💥 проиграл',en:'💥 lost'},
     crash_you:{ua:'Ти',ru:'Ты',en:'You'},
@@ -1751,13 +1813,36 @@
     var waitTimerEl = document.getElementById('crashWaitTimer');
     var playersList = document.getElementById('crashPlayersList');
     var playersCountEl = document.getElementById('crashPlayersCount');
+    var stageEl = document.getElementById('crashStage');
+    var rocket = document.getElementById('crashRocket');
+    var burstEl = document.getElementById('crashBurst');
+    var historyEl = document.getElementById('crashHistory');
+    var infoBtn = document.getElementById('crashInfoBtn');
+    var oddsModal = document.getElementById('crashOdds');
+    var oddsListEl = document.getElementById('crashOddsList');
+    var oddsCloseBtn = document.getElementById('crashOddsCloseBtn');
     var bar = makeBetBar(document.getElementById('crashBetbar'), 100, placeBet, t('crash_btn_bet'));
 
     var pts = [];
     var pollTimer = null, checking = false;
     var phase = 'waiting', mult = 1, t0 = Date.now(), myBet = null, lastRoundId = null;
+    // Той самий розподіл, що й CRASH_ODDS на сервері — запасний варіант для
+    // демо-режиму (поза ботом) і для моменту до першої відповіді сервера.
+    var lastOdds = [
+      {mult:1.20, chance:28.8}, {mult:1.50, chance:18.8}, {mult:2.00, chance:8.2},
+      {mult:3.00, chance:5.4}, {mult:5.00, chance:0.03}
+    ];
 
-    function resetLine(){ pts=[[0,190]]; line.setAttribute('points','0,190'); dot.setAttribute('cx',0); dot.setAttribute('cy',190); }
+    function resetLine(){
+      pts=[[0,190]];
+      line.setAttribute('points','0,190');
+      dot.setAttribute('cx',0); dot.setAttribute('cy',190);
+      rocket.classList.add('hidden');
+      rocket.textContent = '🚀';
+      rocket.style.left = '0%'; rocket.style.top = '100%';
+      rocket.style.transform = 'translate(-50%,-50%) rotate(0deg)';
+      stageEl.classList.remove('boomed');
+    }
     function drawPoint(el, m){
       // Корінь замість прямої лінії: невеликі множники (де тепер і падає
       // більшість раундів, 1.01-1.21x) дають помітний стрибок лінії вгору
@@ -1765,9 +1850,46 @@
       // графіка, саме число m (а отже й виплата) не змінюється жодним чином.
       var riseProgress = Math.min(1, Math.sqrt(Math.max(0, m-1)/2));
       var x = Math.min(300, el*12), y = 190 - riseProgress*180;
+      var prev = pts[pts.length-1];
       pts.push([x,y]);
       line.setAttribute('points', pts.map(function(p){return p[0]+','+p[1];}).join(' '));
       dot.setAttribute('cx',x); dot.setAttribute('cy',y);
+      // Ракета їде по тій самій траєкторії замість голої крапки — трохи
+      // нахиляємо її за напрямком польоту, щоб відчувався рух.
+      var angle = Math.atan2(y-prev[1], x-prev[0]) * 180/Math.PI + 45;
+      rocket.style.left = (x/300*100) + '%';
+      rocket.style.top = (y/190*100) + '%';
+      rocket.style.transform = 'translate(-50%,-50%) rotate(' + angle + 'deg)';
+    }
+
+    function renderHistory(list){
+      if (!list || !list.length){ historyEl.innerHTML = ''; return; }
+      historyEl.innerHTML = list.map(function(m){
+        var cls = m >= 3 ? 'high' : (m >= 1.5 ? 'mid' : '');
+        return '<div class="crash-histchip ' + cls + '">x' + m.toFixed(2) + '</div>';
+      }).join('');
+    }
+
+    function renderOdds(){
+      oddsListEl.innerHTML = lastOdds.map(function(o){
+        var color = o.chance >= 20 ? '#48de9f' : (o.chance >= 8 ? 'var(--cyan)' : (o.chance >= 1 ? 'var(--gold)' : 'var(--pink)'));
+        return '<div class="crash-oddsrow"><span class="om">x' + o.mult.toFixed(2) + '</span><span class="op" style="color:' + color + '">' + o.chance + '%</span></div>';
+      }).join('');
+    }
+    function showOdds(){ renderOdds(); oddsModal.classList.add('show'); }
+    function hideOdds(){ oddsModal.classList.remove('show'); }
+    infoBtn.onclick = showOdds;
+    oddsCloseBtn.onclick = hideOdds;
+
+    function spawnBurst(){
+      if (!settings.anim) return;
+      var n = 10, html = '';
+      for (var i=0;i<n;i++){
+        var ang = (Math.PI*2*i/n) + Math.random()*0.4;
+        var dist = 36 + Math.random()*26;
+        html += '<span style="--bx:' + (Math.cos(ang)*dist).toFixed(1) + 'px;--by:' + (Math.sin(ang)*dist).toFixed(1) + 'px"></span>';
+      }
+      burstEl.innerHTML = html;
     }
 
     function renderPlayers(list, roundPhase){
@@ -1805,6 +1927,8 @@
       var prevPhase = phase;
       phase = r.phase;
       myBet = r.your_bet || null;
+      if (r.odds && r.odds.length) lastOdds = r.odds;
+      renderHistory(r.history || []);
 
       if (phase === 'waiting'){
         waitOverlay.classList.add('show');
@@ -1822,7 +1946,8 @@
           bar.playBtn.onclick = function(){ placeBet(bar.amount()); };
         }
       } else if (phase === 'flying'){
-        if (prevPhase === 'waiting') haptic();
+        if (prevPhase === 'waiting'){ haptic(); rocket.classList.remove('hidden'); }
+        crashMultEl.className = 'crash-mult flying';
         waitOverlay.classList.remove('show');
         if (typeof r.mult === 'number'){
           var serverElapsed = (r.mult - 1) / 0.12;
@@ -1848,6 +1973,9 @@
         if (prevPhase !== 'crashed'){
           crashMultEl.className = 'crash-mult boom';
           flash.classList.remove('hit'); void flash.offsetWidth; flash.classList.add('hit');
+          stageEl.classList.add('boomed');
+          stageEl.classList.remove('shake'); void stageEl.offsetWidth; stageEl.classList.add('shake');
+          rocket.textContent = '💥';
           haptic(myBet && myBet.cashout_mult != null ? 'ok' : 'fail');
         }
         waitOverlay.classList.remove('show');
@@ -1896,7 +2024,7 @@
         var shownMult = mult; // те саме число, яке гравець бачив на екрані в момент кліку
         try {
           var r = await api('/api/crash/cashout', {claimed_mult: shownMult});
-          if (!r.crashed){ setBalance(r.balance); haptic('ok'); }
+          if (!r.crashed){ setBalance(r.balance); haptic('ok'); spawnBurst(); }
           // Фінальний напис/статус (виграш чи таки вибух) підхопить
           // наступний тік опитування — applyStatus сам усе перемалює.
         } catch(e){}
@@ -1906,6 +2034,7 @@
         demo.bet.reward = reward;
         setBalance(balance + reward);
         haptic('ok');
+        spawnBurst();
       }
     }
 
@@ -1949,7 +2078,7 @@
       if (r<95) return 1.61+Math.random()*0.59;
       return 2.21+Math.random()*1.29;
     }
-    var demo = { phase:'waiting', phaseStart: Date.now(), crashPoint: demoCrashPoint(), bet: null, roundId: 1 };
+    var demo = { phase:'waiting', phaseStart: Date.now(), crashPoint: demoCrashPoint(), bet: null, roundId: 1, history: [] };
     function demoPlayers(){ return demo.bet ? [{name:t('crash_you'), bet:demo.bet.bet, cashout_mult:demo.bet.cashout_mult, reward:demo.bet.reward, you:true}] : []; }
     function demoTick(){
       var elapsed = (Date.now() - demo.phaseStart) / 1000;
@@ -1958,20 +2087,24 @@
       }
       if (demo.phase === 'flying'){
         var m = Math.round((1 + elapsed*0.12)*100)/100;
-        if (m >= demo.crashPoint){ demo.phase = 'crashed'; demo.phaseStart = Date.now(); elapsed = 0; }
-        else { applyStatus({phase:'flying', mult:m, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()}); return; }
+        if (m >= demo.crashPoint){
+          demo.phase = 'crashed'; demo.phaseStart = Date.now(); elapsed = 0;
+          demo.history.unshift(demo.crashPoint);
+          demo.history.length = Math.min(demo.history.length, 12);
+        }
+        else { applyStatus({phase:'flying', mult:m, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers(), history:demo.history}); return; }
       }
       if (demo.phase === 'crashed'){
         if (elapsed >= 4){
           demo.phase = 'waiting'; demo.phaseStart = Date.now(); demo.crashPoint = demoCrashPoint(); demo.bet = null; demo.roundId++;
-          applyStatus({phase:'waiting', time_left:7, round_id:demo.roundId, your_bet:null, players:[]});
+          applyStatus({phase:'waiting', time_left:7, round_id:demo.roundId, your_bet:null, players:[], history:demo.history});
         } else {
-          applyStatus({phase:'crashed', crash_point:demo.crashPoint, time_left:4-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()});
+          applyStatus({phase:'crashed', crash_point:demo.crashPoint, time_left:4-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers(), history:demo.history});
         }
         return;
       }
       if (demo.phase === 'waiting'){
-        applyStatus({phase:'waiting', time_left:7-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers()});
+        applyStatus({phase:'waiting', time_left:7-elapsed, round_id:demo.roundId, your_bet:demo.bet, players:demoPlayers(), history:demo.history});
       }
     }
 
