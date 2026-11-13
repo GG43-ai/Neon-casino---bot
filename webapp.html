@@ -516,15 +516,29 @@
   .case-oddsopen{flex:1;padding:12px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.78rem;background:linear-gradient(135deg,var(--pink),#ff8fd6);color:#2b0318}
   .case-oddsclose{flex:1;padding:12px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:.78rem;background:var(--bg2);border:1px solid rgba(255,255,255,.12);color:var(--dim)}
 
-  /* UPGRADE WHEEL */
-  .upgwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px}
-  .upgwheel{position:relative;width:200px;height:200px;margin-bottom:14px}
-  .upgwheel svg{width:100%;height:100%;transform:rotate(-90deg)}
-  .upgarrow{position:absolute;top:50%;left:50%;width:4px;height:92px;margin-left:-2px;margin-top:-92px;transform-origin:50% 100%;background:linear-gradient(var(--text),var(--dim));border-radius:3px;transition:transform 2.4s cubic-bezier(.17,.67,.2,1.01)}
+  /* UPGRADE WHEEL — колесо з шансом у відсотках (кольори з теми) */
+  .upgwrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px;width:100%}
+  .upgwheel{position:relative;width:220px;height:220px;margin:6px auto 16px}
+  .upgsvg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+  .upgtrack{stroke:rgba(255,255,255,.08)}
+  .upgtick{stroke:rgba(255,255,255,.2);stroke-width:.6}
+  .upgarrow{position:absolute;top:50%;left:50%;width:4px;height:84px;margin-left:-2px;margin-top:-84px;transform-origin:50% 100%;background:linear-gradient(var(--text),var(--dim));border-radius:3px;transition:transform 2.4s cubic-bezier(.17,.67,.2,1.01)}
   .upgarrow::after{content:'';position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--text)}
-  .upgcenter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:66px;height:66px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-size:.86rem;font-weight:800;color:var(--gold);border:2px solid rgba(255,255,255,.1)}
-  .upgmultrow{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:10px}
-  .upgmultrow input[type=range]{flex:1;margin:0 10px}
+  .upgcenter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:132px;height:132px;border-radius:50%;background:var(--bg2);border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;box-shadow:inset 0 0 24px rgba(0,0,0,.45)}
+  .upgcenter b{font-family:'Unbounded',sans-serif;font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text)}
+  .upgcenter small{font-size:.64rem;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+  .upgpct{display:flex;align-items:center;gap:6px;width:100%;margin-bottom:8px}
+  .upgstep{flex:1;height:38px;border-radius:12px;background:var(--panel);border:1px solid rgba(255,255,255,.1);color:var(--text);font-family:'Unbounded',sans-serif;font-weight:700;font-size:.8rem}
+  .upgstep:active:not(:disabled){transform:scale(.95)}
+  .upgstep:disabled{opacity:.45}
+  .upgin{flex:1.7;display:flex;align-items:center;justify-content:center;gap:4px;height:38px;border-radius:12px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);padding:0 8px;color:var(--gold);font-family:'Unbounded',sans-serif;font-weight:700}
+  .upgin input{width:100%;min-width:0;background:none;border:none;outline:none;text-align:center;color:inherit;font:inherit;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .upgin input::-webkit-outer-spin-button,.upgin input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .upgin input:disabled{opacity:.6}
+  .upgquick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;margin-bottom:12px}
+  .upgquick button{height:32px;border-radius:10px;background:var(--bg2);border:1px solid rgba(255,255,255,.08);color:var(--dim);font-size:.7rem;font-weight:700}
+  .upgquick button.on{color:var(--text);border-color:var(--gold)}
+  .upgquick button:disabled{opacity:.45}
   .upgstats{display:flex;justify-content:space-between;width:100%;font-size:.68rem;color:var(--dim);margin-bottom:14px}
   .upgstats b{color:var(--text)}
   .quickgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
@@ -1033,20 +1047,35 @@
         <p class="gamesub" data-i18n="upgrade_sub">Обери множник — влучиш у жовте й забереш його</p>
         <div class="upgwrap">
           <div class="upgwheel">
-            <svg viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="44" fill="none" stroke="#555" stroke-width="10"/>
-              <circle id="upgArc" cx="50" cy="50" r="44" fill="none" stroke="var(--gold)" stroke-width="10" stroke-dasharray="69 207" stroke-dashoffset="0"/>
+            <svg class="upgsvg" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="upgGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" style="stop-color:var(--gold)"/>
+                  <stop offset="100%" style="stop-color:var(--pink)"/>
+                </linearGradient>
+              </defs>
+              <g id="upgTicks"></g>
+              <circle class="upgtrack" cx="50" cy="50" r="42" fill="none" stroke-width="6"/>
+              <circle id="upgArc" cx="50" cy="50" r="42" fill="none" stroke="url(#upgGrad)" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 999"/>
             </svg>
             <div class="upgarrow" id="upgArrow"></div>
-            <div class="upgcenter" id="upgCenter">x2.00</div>
+            <div class="upgcenter"><b id="upgCenter">--</b><small id="upgLbl"></small></div>
           </div>
-          <div class="upgmultrow">
-            <span style="font-size:.68rem;color:var(--dim)">x1.2</span>
-            <input type="range" id="upgSlider" min="120" max="2000" step="10" value="200">
-            <span style="font-size:.68rem;color:var(--dim)">x20</span>
+          <div class="upgpct" id="upgSteps">
+            <button type="button" class="upgstep" data-d="-5">−5</button>
+            <button type="button" class="upgstep" data-d="-1">−1</button>
+            <label class="upgin"><input id="upgPctInput" type="number" inputmode="decimal" step="0.01"><span>%</span></label>
+            <button type="button" class="upgstep" data-d="1">+1</button>
+            <button type="button" class="upgstep" data-d="5">+5</button>
+          </div>
+          <div class="upgquick">
+            <button type="button" data-p="10">10%</button>
+            <button type="button" data-p="25">25%</button>
+            <button type="button" data-p="50">50%</button>
+            <button type="button" data-p="75">75%</button>
           </div>
           <div class="upgstats">
-            <span>Шанс: <b id="upgChance">—</b></span>
+            <span>Множник: <b id="upgMult">x2.00</b></span>
             <span>Виграш: <b id="upgWin">—</b></span>
           </div>
         </div>
@@ -1973,7 +2002,6 @@
       for (x = 0; x < W; x += 40){ ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke(); }
       for (y = 20; y < H - 28; y += 40){ ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); }
 
-      drawGauge(now);
 
       var pts = curvePoints(now);
       if (pts.length > 1){
@@ -2018,38 +2046,6 @@
         }
       }
       ctx.globalAlpha = 1;
-    }
-    // Кругова шкала: множник m заповнює коло як 1 - 1/m, тож 2x — рівно половина кола
-    function drawGauge(now){
-      var cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.36, lw = 10;
-      var crashed = phase === 'crashed';
-      var m = crashed ? (crashPoint || 1) : (phase === 'flying' ? 1 + 0.12 * flightTime(now) : 1);
-      var frac = Math.max(0, Math.min(1, 1 - 1 / m));
-      ctx.lineCap = 'round'; ctx.lineWidth = lw;
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-      // позначка 2x — рівно на половині кола (знизу)
-      var ah = -Math.PI / 2 + Math.PI;
-      ctx.strokeStyle = alpha(col.gold, 0.7); ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(ah) * (R - lw / 2 - 3), cy + Math.sin(ah) * (R - lw / 2 - 3));
-      ctx.lineTo(cx + Math.cos(ah) * (R + lw / 2 + 3), cy + Math.sin(ah) * (R + lw / 2 + 3));
-      ctx.stroke();
-      if (frac > 0){
-        var a0 = -Math.PI / 2, a1 = a0 + frac * Math.PI * 2;
-        var g = ctx.createLinearGradient(cx - R, cy, cx + R, cy);
-        g.addColorStop(0, col.line); g.addColorStop(1, col.gold);
-        var c = crashed ? col.boom : g;
-        ctx.lineWidth = lw; ctx.strokeStyle = c;
-        ctx.shadowColor = crashed ? col.boom : col.line; ctx.shadowBlur = 14;
-        ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke();
-        ctx.shadowBlur = 0;
-      } else if (phase === 'waiting'){
-        var pulse = (Math.sin(now / 420) + 1) / 2;
-        ctx.strokeStyle = alpha(col.cyan, 0.15 + pulse * 0.2); ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(cx, cy, R + 6 + pulse * 4, 0, Math.PI * 2); ctx.stroke();
-      }
-      ctx.lineCap = 'butt';
     }
     function frame(){
       stepFX();
@@ -3206,23 +3202,36 @@
     window.loadCases = loadCases;
   })();
 
-  /* ================= АПГРЕЙД (колесо) ================= */
+  /* ================= АПГРЕЙД (колесо, шанс у відсотках) ================= */
   (function(){
-    var slider = document.getElementById('upgSlider');
+    // Ті самі межі й комісія, що на сервері (UPGRADE_MIN_MULT, UPGRADE_MAX_MULT, UPGRADE_HOUSE_EDGE)
+    var UP_MIN = 1.2, UP_MAX = 20, UP_EDGE = 0.05;
+    var PCT_MIN = (1 - UP_EDGE) / UP_MAX * 100;   // 4.75%
+    var PCT_MAX = (1 - UP_EDGE) / UP_MIN * 100;   // 79.17%
+
     var center = document.getElementById('upgCenter');
+    var lbl = document.getElementById('upgLbl');
     var arc = document.getElementById('upgArc');
     var arrow = document.getElementById('upgArrow');
-    var chanceEl = document.getElementById('upgChance');
+    var pctInput = document.getElementById('upgPctInput');
+    var multEl = document.getElementById('upgMult');
     var winEl = document.getElementById('upgWin');
     var msg = document.getElementById('upgradeMsg');
-    var CIRC = 2*Math.PI*44;
+    var ticksG = document.getElementById('upgTicks');
+    var quickBtns = document.querySelectorAll('.upgquick button');
+    var CIRC = 2 * Math.PI * 42;
+    var mult = 2.00;
     var spinning = false, spinTotal = 0;
     var bar = makeBetBar(document.getElementById('upgradeBetbar'), 100, play, 'Апгрейднути');
 
-    // Поки чекаємо відповідь сервера, стрілка не повинна стояти на місці —
-    // крутимо її безперервно (2 оберти/сек) прямо від поточного кута, а
-    // щойно прийде результат — зупиняємо цей цикл і продовжуємо (без стрибка,
-    // з того самого візуального кута) точною анімацією до r.roll*360.
+    var tk = '';
+    for (var i = 0; i < 60; i++){
+      var a = i / 60 * 2 * Math.PI, r1 = (i % 5 === 0) ? 46 : 47.5, r2 = 49;
+      tk += '<line class="upgtick" x1="' + (50 + Math.cos(a) * r1) + '" y1="' + (50 + Math.sin(a) * r1) +
+            '" x2="' + (50 + Math.cos(a) * r2) + '" y2="' + (50 + Math.sin(a) * r2) + '"/>';
+    }
+    ticksG.innerHTML = tk;
+
     var liveSpinRAF = null, liveSpinAngle = 0;
     function startLiveSpin(){
       var startAngle = ((spinTotal % 360) + 360) % 360;
@@ -3240,35 +3249,68 @@
       if (liveSpinRAF){ cancelAnimationFrame(liveSpinRAF); liveSpinRAF = null; }
     }
 
-    function multFromSlider(){ return slider.value/100; }
-    function chanceFor(mult){ return Math.max(0.02, Math.min(0.95, (1/mult)*0.95)); }
-    function renderWheel(){
-      var mult = multFromSlider();
-      var chance = chanceFor(mult);
-      center.textContent = 'x'+mult.toFixed(2);
-      chanceEl.textContent = Math.round(chance*100)+'%';
-      winEl.textContent = Math.round(bar.amount()*mult)+' 💰';
-      arc.setAttribute('stroke-dasharray', (chance*CIRC)+' '+(CIRC-chance*CIRC));
+    function chanceOf(m){ return (1 / m) * (1 - UP_EDGE); }
+    function pctOf(m){ return chanceOf(m) * 100; }
+    function clampMult(m){ return Math.max(UP_MIN, Math.min(UP_MAX, Math.round(m * 100) / 100)); }
+    function setControls(dis){
+      document.querySelectorAll('#upgSteps button, #upgSteps input, .upgquick button').forEach(function(el){ el.disabled = dis; });
     }
-    slider.addEventListener('input', function(){ if(!spinning) renderWheel(); });
-    setInterval(function(){ if(!spinning) renderWheel(); }, 400); // підхоплює зміну ставки з betbar
+
+    // Стрілка стоїть на кінці жовтого сектора (за годинниковою від верху)
+    function restArrow(){
+      spinTotal = pctOf(mult) / 100 * 360;
+      arrow.style.transition = 'none';
+      arrow.style.transform = 'rotate(' + spinTotal + 'deg)';
+    }
+    function renderWheel(){
+      var p = pctOf(mult), frac = p / 100;
+      center.textContent = p.toFixed(2) + '%';
+      lbl.textContent = p >= 60 ? 'високий шанс' : 'низький шанс';
+      multEl.textContent = 'x' + mult.toFixed(2);
+      winEl.textContent = Math.floor(bar.amount() * mult) + ' 💰';
+      arc.setAttribute('stroke-dasharray', (frac * CIRC) + ' ' + CIRC);
+      quickBtns.forEach(function(b){ b.classList.toggle('on', Math.abs(+b.dataset.p - p) < 0.5); });
+      if (document.activeElement !== pctInput) pctInput.value = p.toFixed(2);
+    }
+    function setMult(m){
+      mult = clampMult(m);
+      renderWheel();
+      if (!spinning) restArrow();
+    }
+    function setPct(p){
+      if (!isFinite(p)) return;
+      p = Math.max(PCT_MIN, Math.min(PCT_MAX, p));
+      setMult((1 - UP_EDGE) * 100 / p);
+    }
+
+    document.querySelectorAll('.upgstep').forEach(function(b){
+      b.addEventListener('click', function(){ if (!spinning) setPct(pctOf(mult) + (+b.dataset.d)); });
+    });
+    quickBtns.forEach(function(b){
+      b.addEventListener('click', function(){ if (!spinning) setPct(+b.dataset.p); });
+    });
+    pctInput.addEventListener('change', function(){
+      if (!spinning){ setPct(parseFloat(pctInput.value)); pctInput.value = pctOf(mult).toFixed(2); }
+    });
+    pctInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') pctInput.blur(); });
+    setInterval(function(){ if (!spinning) renderWheel(); }, 400); // підхоплює зміну ставки з betbar
     renderWheel();
+    restArrow();
 
     async function play(amount){
       if (spinning) return;
       if (!liveMode){ msg.textContent = 'Увійди через бота, щоб грати'; return; }
-      var mult = multFromSlider();
       renderWheel(); // гарантує, що жовтий/сірий сектор на колесі рендериться
                      // саме для цього mult, а не для застарілого значення, яке
                      // міг ще не підхопити періодичний рендер (раз на 400мс)
       spinning = true; bar.setPlaying(true,'Крутиться...'); msg.textContent = 'Крутиться...';
-      slider.disabled = true;
+      setControls(true);
       startLiveSpin();
       var r;
       try { r = await api('/api/upgrade/play', {amount:amount, multiplier:mult}); }
       catch(e){
         stopLiveSpin();
-        spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
+        spinning = false; bar.setPlaying(false,'Апгрейднути'); setControls(false);
         msg.textContent = e.error==='insufficient_funds' ? 'Недостатньо монет' : 'Помилка';
         return;
       }
@@ -3309,7 +3351,7 @@
       function reveal(){
         if (revealed) return;
         revealed = true;
-        spinning = false; bar.setPlaying(false,'Апгрейднути'); slider.disabled = false;
+        spinning = false; bar.setPlaying(false,'Апгрейднути'); setControls(false);
         setBalance(r.balance);
         msg.textContent = r.win ? ('🎉 Влучило! +'+r.reward+' монет') : 'Не влучило — сірий сектор';
         haptic(r.win?'ok':'fail');
