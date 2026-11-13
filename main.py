@@ -981,7 +981,8 @@ def api_upgrade_play():
     # Шанс на виграш — обернено пропорційний бажаному множнику, з
     # хаус-еджем, той самий принцип, що й на CS-скін сайтах: що вищий
     # множник обираєш, то вужчий жовтий сектор колеса.
-    chance = max(0.02, min(0.95, (1 / multiplier) * (1 - UPGRADE_HOUSE_EDGE)))
+    # Шанс = обраний відсоток; виграш = ставка + (100 - шанс)%, тобто множник = 2 - шанс.
+    chance = max(0.02, min(0.95, 2 - multiplier))
     roll = random.random()
     win = roll < chance
     reward = int(amount * multiplier) if win else 0
