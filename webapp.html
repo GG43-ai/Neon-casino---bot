@@ -140,7 +140,10 @@
   .crash-card{background:linear-gradient(165deg,var(--panel),var(--bg2));border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:14px;margin-bottom:14px}
   .crash-betrow{display:flex;align-items:center;gap:12px}
   .crash-lbl{color:var(--dim);font-size:.82rem;min-width:56px}
-  .crash-stake{flex:1;height:50px;border-radius:14px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums;color:var(--gold)}
+  .crash-stake input{flex:none;width:110px;background:none;border:none;outline:none;text-align:center;color:var(--gold);font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .crash-stake input::-webkit-outer-spin-button,.crash-stake input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .crash-stake input:disabled{opacity:.6}
+  .crash-stake{flex:1;min-width:0;height:50px;border-radius:14px;background:var(--bg2);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums;color:var(--gold)}
   .crash-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
   .crash-preset{height:40px;border-radius:12px;background:var(--bg2);border:1px solid rgba(255,255,255,.08);color:var(--dim);font-family:'Unbounded',sans-serif;font-weight:700;font-size:.7rem;font-variant-numeric:tabular-nums}
   .crash-preset.on{color:var(--text);border-color:var(--violet);box-shadow:inset 0 0 0 1px var(--violet)}
@@ -690,7 +693,7 @@
         <div class="crash-card">
           <div class="crash-betrow">
             <span class="crash-lbl" id="crashStakeLbl"></span>
-            <div class="crash-stake"><span id="crashStake">100</span><span>💰</span></div>
+            <div class="crash-stake"><input id="crashStakeInput" type="number" inputmode="numeric" min="1" step="1" value="100"><span>💰</span></div>
           </div>
           <div class="crash-presets" id="crashPresets"></div>
           <button class="crash-act bet" id="crashAct" type="button">…</button>
@@ -1826,7 +1829,7 @@
     var bigEl = $('crashBig'), labelEl = $('crashLabel'), statusEl = $('crashStatus');
     var flashEl = $('crashFlash'), popsEl = $('crashPops');
     var histEl = $('crashHistory'), playersEl = $('crashPlayers'), countEl = $('crashPlayersCount');
-    var stakeEl = $('crashStake'), stakeLblEl = $('crashStakeLbl'), presetsEl = $('crashPresets'), actBtn = $('crashAct');
+    var stakeInp = $('crashStakeInput'), stakeLblEl = $('crashStakeLbl'), presetsEl = $('crashPresets'), actBtn = $('crashAct');
     var infoBtn = $('crashInfoBtn'), oddsModal = $('crashOdds'), oddsListEl = $('crashOddsList'), oddsCloseBtn = $('crashOddsCloseBtn');
 
     var PRESETS = [100, 250, 500, 1000];
@@ -1970,12 +1973,7 @@
       for (x = 0; x < W; x += 40){ ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke(); }
       for (y = 20; y < H - 28; y += 40){ ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); }
 
-      if (phase === 'waiting'){
-        var pulse = (Math.sin(now / 420) + 1) / 2;
-        ctx.strokeStyle = alpha(col.cyan, 0.2 + pulse * 0.25);
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.33 + pulse * 6, 0, Math.PI * 2); ctx.stroke();
-      }
+      drawGauge(now);
 
       var pts = curvePoints(now);
       if (pts.length > 1){
@@ -2021,6 +2019,38 @@
       }
       ctx.globalAlpha = 1;
     }
+    // Кругова шкала: множник m заповнює коло як 1 - 1/m, тож 2x — рівно половина кола
+    function drawGauge(now){
+      var cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.36, lw = 10;
+      var crashed = phase === 'crashed';
+      var m = crashed ? (crashPoint || 1) : (phase === 'flying' ? 1 + 0.12 * flightTime(now) : 1);
+      var frac = Math.max(0, Math.min(1, 1 - 1 / m));
+      ctx.lineCap = 'round'; ctx.lineWidth = lw;
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+      // позначка 2x — рівно на половині кола (знизу)
+      var ah = -Math.PI / 2 + Math.PI;
+      ctx.strokeStyle = alpha(col.gold, 0.7); ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ah) * (R - lw / 2 - 3), cy + Math.sin(ah) * (R - lw / 2 - 3));
+      ctx.lineTo(cx + Math.cos(ah) * (R + lw / 2 + 3), cy + Math.sin(ah) * (R + lw / 2 + 3));
+      ctx.stroke();
+      if (frac > 0){
+        var a0 = -Math.PI / 2, a1 = a0 + frac * Math.PI * 2;
+        var g = ctx.createLinearGradient(cx - R, cy, cx + R, cy);
+        g.addColorStop(0, col.line); g.addColorStop(1, col.gold);
+        var c = crashed ? col.boom : g;
+        ctx.lineWidth = lw; ctx.strokeStyle = c;
+        ctx.shadowColor = crashed ? col.boom : col.line; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (phase === 'waiting'){
+        var pulse = (Math.sin(now / 420) + 1) / 2;
+        ctx.strokeStyle = alpha(col.cyan, 0.15 + pulse * 0.2); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, R + 6 + pulse * 4, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
     function frame(){
       stepFX();
       draw(Date.now());
@@ -2051,6 +2081,10 @@
       actBtn.className = 'crash-act ' + mode;
       actBtn.disabled = !!disabled;
     }
+    stakeInp.addEventListener('input', function(){
+      stake = Math.max(0, Math.floor(+stakeInp.value) || 0);
+      renderPresets(); updateAct();
+    });
     function canEditBet(){ return phase === 'waiting' && !myBet; }
     function renderPresets(){
       var sig = stake + '|' + canEditBet();
@@ -2060,18 +2094,19 @@
         return '<button type="button" class="crash-preset' + (v === stake ? ' on' : '') + '" data-v="' + v + '"' +
           (canEditBet() ? '' : ' disabled') + '>' + v + '</button>';
       }).join('');
-      stakeEl.textContent = fmt(stake);
+      stakeInp.disabled = !canEditBet();
     }
     presetsEl.addEventListener('click', function(e){
       var b = e.target.closest('.crash-preset');
       if (!b || !canEditBet()) return;
       stake = +b.dataset.v;
+      stakeInp.value = stake;
       renderPresets(); updateAct();
     });
     function updateAct(){
       if (phase === 'waiting'){
         if (myBet) setAct(t('crash_btn_waiting'), 'wait', true);
-        else setAct(t('crash_btn_bet'), 'bet', stake > balance);
+        else setAct(t('crash_btn_bet'), 'bet', stake <= 0 || stake > balance);
       } else if (phase === 'flying'){
         if (myBet && myBet.cashout_mult == null) setAct(t('crash_btn_cashout') + ' ' + fmt(myBet.bet * mult) + ' 💰', 'cash', false);
         else setAct(t('crash_btn_flying_spectate'), 'wait', true);
