@@ -483,38 +483,37 @@ def _crash_mult_at(elapsed_seconds):
     return round(1 + elapsed_seconds * 0.12, 2)
 
 
+# Розподіл точки вибуху: 30% — 1.10–1.30x, 60% — 1.50–2.50x, 10% — 3.00–4.00x.
+CRASH_SEGMENTS = [(1.10, 1.30, 30), (1.50, 2.50, 60), (3.00, 4.00, 10)]  # (від, до, відсоток)
+
+
 def _crash_target_point():
-    """Повільніший ріст сам собою не збільшує й не зменшує виплати (розподіл
-    множників не залежить від того, скільки реального часу йде кожна
-    секунда гри) — але він дає гравцю більше часу зреагувати рівно в
-    потрібний момент, тобто на практиці трохи піднімає середній реалізований
-    виграш. Компенсуємо це зсувом розподілу в бік ранніх вибухів: 75%
-    випадків — 1.01–1.21x, 17% — 1.21–2.01x, і лише 8% — вище 2.01x."""
+    """Вибір точки вибуху за розподілом CRASH_SEGMENTS (сума відсотків = 100)."""
     r = random.uniform(0, 100)
-    if r < 75:
-        return round(random.uniform(1.01, 1.21), 2)
-    if r < 92:
-        return round(random.uniform(1.21, 2.01), 2)
-    return round(random.uniform(2.01, 5.01), 2)
+    acc = 0
+    for lo, hi, w in CRASH_SEGMENTS:
+        acc += w
+        if r < acc:
+            return round(random.uniform(lo, hi), 2)
+    lo, hi, _ = CRASH_SEGMENTS[-1]
+    return round(random.uniform(lo, hi), 2)
 
 
 _crash_round["crash_point"] = _crash_target_point()
 
 
 def _crash_odds_table():
-    """Чесна таблиця шансів «долетіти» бодай до вказаного множника, порахована
-    з того ж самого розподілу, за яким реально обирається crash_point у
-    _crash_target_point() (75% 1.01–1.21x, 17% 1.21–2.01x, 8% 2.01–5.01x) —
-    не вигадані числа, а реальна площа під кривою розподілу."""
+    """Шанс «долетіти» бодай до множника m — порахований з того ж розподілу
+    CRASH_SEGMENTS, за яким реально обирається crash_point."""
     marks = [1.20, 1.50, 2.00, 3.00, 5.00]
     out = []
     for m in marks:
-        if m <= 1.21:
-            pct = 75 * (1.21 - m) / 0.20 + 25
-        elif m <= 2.01:
-            pct = 17 * (2.01 - m) / 0.80 + 8
-        else:
-            pct = 8 * (5.01 - m) / 3.00
+        pct = 0.0
+        for lo, hi, w in CRASH_SEGMENTS:
+            if m <= lo:
+                pct += w
+            elif m < hi:
+                pct += w * (hi - m) / (hi - lo)
         pct = max(0.0, pct)
         out.append({"mult": m, "chance": round(pct, 1) if pct >= 1 else round(pct, 2)})
     return out
