@@ -1064,7 +1064,7 @@
           <div class="upgpct" id="upgSteps">
             <button type="button" class="upgstep" data-d="-5">−5</button>
             <button type="button" class="upgstep" data-d="-1">−1</button>
-            <label class="upgin"><input id="upgPctInput" type="number" inputmode="decimal" step="0.01"><span>%</span></label>
+            <label class="upgin"><input id="upgPctInput" type="number" inputmode="numeric" step="1" min="5" max="80"><span>%</span></label>
             <button type="button" class="upgstep" data-d="1">+1</button>
             <button type="button" class="upgstep" data-d="5">+5</button>
           </div>
@@ -1894,7 +1894,7 @@
       cvs.height = Math.max(1, Math.round(H * DPR));
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     }
-    function fmt(n){ return Math.floor(Number(n) || 0).toLocaleString('ru-RU'); }
+    function fmt(n){ return String(Math.floor(Number(n) || 0)); }
 
     /* ---------- звуки (тільки після дотику гравця) ---------- */
     var AC = null;
@@ -3205,9 +3205,8 @@
   /* ================= АПГРЕЙД (колесо, шанс у відсотках) ================= */
   (function(){
     // Ті самі межі й комісія, що на сервері (UPGRADE_MIN_MULT, UPGRADE_MAX_MULT, UPGRADE_HOUSE_EDGE)
-    var UP_MIN = 1.2, UP_MAX = 20, UP_EDGE = 0.05;
-    var PCT_MIN = (1 - UP_EDGE) / UP_MAX * 100;   // 4.75%
-    var PCT_MAX = (1 - UP_EDGE) / UP_MIN * 100;   // 79.17%
+    var UP_MIN = 1.2, UP_MAX = 20;
+    var PCT_MIN = 5, PCT_MAX = 80;   // шанс цілим відсотком: множник 1.95x … 1.2x
 
     var center = document.getElementById('upgCenter');
     var lbl = document.getElementById('upgLbl');
@@ -3220,7 +3219,7 @@
     var ticksG = document.getElementById('upgTicks');
     var quickBtns = document.querySelectorAll('.upgquick button');
     var CIRC = 2 * Math.PI * 42;
-    var mult = 2.00;
+    var mult = 1.50;
     var spinning = false, spinTotal = 0;
     var bar = makeBetBar(document.getElementById('upgradeBetbar'), 100, play, 'Апгрейднути');
 
@@ -3249,8 +3248,7 @@
       if (liveSpinRAF){ cancelAnimationFrame(liveSpinRAF); liveSpinRAF = null; }
     }
 
-    function chanceOf(m){ return (1 / m) * (1 - UP_EDGE); }
-    function pctOf(m){ return chanceOf(m) * 100; }
+    function pctOf(m){ return Math.round((2 - m) * 100); }
     function clampMult(m){ return Math.max(UP_MIN, Math.min(UP_MAX, Math.round(m * 100) / 100)); }
     function setControls(dis){
       document.querySelectorAll('#upgSteps button, #upgSteps input, .upgquick button').forEach(function(el){ el.disabled = dis; });
@@ -3264,13 +3262,13 @@
     }
     function renderWheel(){
       var p = pctOf(mult), frac = p / 100;
-      center.textContent = p.toFixed(2) + '%';
+      center.textContent = p + '%';
       lbl.textContent = p >= 60 ? 'високий шанс' : 'низький шанс';
       multEl.textContent = 'x' + mult.toFixed(2);
       winEl.textContent = Math.floor(bar.amount() * mult) + ' 💰';
       arc.setAttribute('stroke-dasharray', (frac * CIRC) + ' ' + CIRC);
       quickBtns.forEach(function(b){ b.classList.toggle('on', Math.abs(+b.dataset.p - p) < 0.5); });
-      if (document.activeElement !== pctInput) pctInput.value = p.toFixed(2);
+      if (document.activeElement !== pctInput) pctInput.value = p;
     }
     function setMult(m){
       mult = clampMult(m);
@@ -3279,8 +3277,8 @@
     }
     function setPct(p){
       if (!isFinite(p)) return;
-      p = Math.max(PCT_MIN, Math.min(PCT_MAX, p));
-      setMult((1 - UP_EDGE) * 100 / p);
+      p = Math.max(PCT_MIN, Math.min(PCT_MAX, Math.round(p)));
+      setMult(2 - p / 100);
     }
 
     document.querySelectorAll('.upgstep').forEach(function(b){
@@ -3290,7 +3288,7 @@
       b.addEventListener('click', function(){ if (!spinning) setPct(+b.dataset.p); });
     });
     pctInput.addEventListener('change', function(){
-      if (!spinning){ setPct(parseFloat(pctInput.value)); pctInput.value = pctOf(mult).toFixed(2); }
+      if (!spinning){ setPct(parseInt(pctInput.value, 10)); pctInput.value = pctOf(mult); }
     });
     pctInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') pctInput.blur(); });
     setInterval(function(){ if (!spinning) renderWheel(); }, 400); // підхоплює зміну ставки з betbar
