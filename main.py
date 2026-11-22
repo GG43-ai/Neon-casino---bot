@@ -233,7 +233,7 @@ RATE_LIMITED_PATHS = {
     # /api/mines/open навмисно НЕ тут: це не нова ставка й не списання
     # грошей (вони вже внесені в mines/bet) — лише відкриття клітинки в
     # уже оплаченій грі, яке гравець цілком може тапати швидко поспіль.
-    "/api/crash/bet", "/api/crash/cashout",
+    "/api/crash/bet", "/api/crash/cashout", "/api/pvp/bet",
     "/api/roulette/play", "/api/coinflip/play", "/api/basket/play",
     "/api/football/play", "/api/darts/play", "/api/bowling/play",
     "/api/slots/play", "/api/transfer", "/api/promo/redeem", "/api/bonus/claim",
@@ -1225,7 +1225,7 @@ def api_mines_bet():
 
     with WEB_GAME_LOCK:
         _clear_stale_games(uid)
-        if uid in web_mines_games or _crash_uid_active(uid):
+        if uid in web_mines_games or _crash_uid_active(uid) or _pvp_uid_active(uid):
             return {"error": "active_game"}, 409
 
         if not call_async(spend(uid, amount)):
@@ -1309,7 +1309,7 @@ def api_crash_bet():
 
     with WEB_GAME_LOCK:
         _clear_stale_games(uid)
-        if uid in web_mines_games:
+        if uid in web_mines_games or _pvp_uid_active(uid):
             return {"error": "active_game"}, 409
         phase, info = _crash_state_locked()
         if phase != "waiting":
@@ -1409,6 +1409,220 @@ def api_crash_cashout():
 
     balance = call_async(get_user(uid))[2]
     return {"reward": reward, "mult": pay_mult, "balance": balance}
+
+
+# ================= PVP (джекпот-колесо на кількох гравців) =================
+# Кожен вносить суму в спільний банк; переможця обирають чесно, пропорційно
+# його частці банку (хто вніс більше — має більший шанс, але не гарантію).
+# Будинок лишає собі невеликий відсоток (той самий дух хаус-еджу, що й в
+# Апгрейді), решту банку забирає один переможець.
+PVP_BET_SEC = 20       # скільки триває прийом ставок після того, як зібрався 2-й гравець
+PVP_ROLL_SEC = 5        # тривалість анімації розкрутки колеса на клієнті (переможець уже відомий серверу)
+PVP_SHOW_SEC = 6        # скільки показуємо переможця, перш ніж відкрити новий раунд
+PVP_MIN_PLAYERS = 2
+PVP_WAIT_TIMEOUT = 90   # якщо другий гравець так і не прийшов — повертаємо ставку першому
+PVP_RAKE = 0.05
+PVP_COLORS = ["#2bffa3", "#ffc342", "#b47bff", "#19e8ff", "#ff2d78", "#5b8def"]
+
+
+def _pvp_new_seed():
+    """Provably fair: seed генерується одразу (криптографічно випадковий),
+    але гравцям до розіграшу видно лише його sha256-хеш (seed_hash) — так
+    сервер не може заднім числом підлаштувати seed під вигідний собі
+    результат. Після розіграшу сам seed розкривається, і будь-хто може
+    перерахувати sha256(seed) й sha256(seed+id раунду), щоб звірити чесність."""
+    seed = os.urandom(16).hex()
+    return seed, hashlib.sha256(seed.encode()).hexdigest()
+
+
+def _pvp_fresh_round(round_id):
+    seed, seed_hash = _pvp_new_seed()
+    return {
+        "id": round_id, "phase": "waiting", "phase_start": time.time(),
+        "first_bet_at": None,
+        "bets": {},     # uid -> {"name","bet"}
+        "order": [],    # порядок приєднання — звідси й колір сегмента на колесі
+        "seed": seed, "seed_hash": seed_hash,
+        "winner_uid": None, "winner_name": None, "winner_pct": None,
+        "payout": None, "roll_frac": None,
+    }
+
+
+_pvp_round = _pvp_fresh_round(1)
+
+
+def _pvp_resolve_locked(r):
+    """Вага кожного гравця = його частка банку. roll_frac рахуємо з
+    приватного (поки що) seed та id раунду — результат визначений заздалегідь
+    і не залежить від того, коли саме сервер його порахує."""
+    bets = r["bets"]
+    total = sum(b["bet"] for b in bets.values())
+    roll_frac = int(hashlib.sha256((r["seed"] + str(r["id"])).encode()).hexdigest(), 16) / float(1 << 256)
+    cum = 0.0
+    winner_uid = r["order"][-1]
+    for uid in r["order"]:
+        cum += bets[uid]["bet"] / total
+        if roll_frac <= cum:
+            winner_uid = uid
+            break
+    payout = max(1, round(total * (1 - PVP_RAKE)))
+    r["winner_uid"] = winner_uid
+    r["winner_name"] = bets[winner_uid]["name"]
+    r["winner_pct"] = round(bets[winner_uid]["bet"] / total * 100, 2)
+    r["payout"] = payout
+    r["roll_frac"] = round(roll_frac, 6)
+    call_async(add_balance(winner_uid, payout))
+    for uid in bets:
+        call_async(clear_active_game(uid))
+
+
+def _pvp_state_locked():
+    """Та сама лінива фазова машина, що й у Краша (рахує фазу спільного
+    раунду за часовими мітками щоразу, коли її питають — без фонового
+    таск-лупу). На відміну від Краша, тут потрібні щонайменше 2 гравці: поки
+    їх менше — раунд стоїть у 'waiting' без дедлайну, і лише з другим
+    гравцем стартує відлік ставок."""
+    now = time.time()
+    r = _pvp_round
+
+    if r["phase"] == "waiting":
+        if len(r["bets"]) >= PVP_MIN_PLAYERS:
+            r["phase"] = "betting"
+            r["phase_start"] = now
+        elif r["first_bet_at"] and now - r["first_bet_at"] > PVP_WAIT_TIMEOUT:
+            # Один гравець чекав надто довго й так і не дочекався другого —
+            # повертаємо йому ставку, щоб гроші не висіли в підвішеному стані.
+            next_id = r["id"] + 1
+            for uid, b in r["bets"].items():
+                call_async(add_balance(uid, b["bet"]))
+                call_async(clear_active_game(uid))
+            _pvp_round.clear()
+            _pvp_round.update(_pvp_fresh_round(next_id))
+            return "waiting", {"time_left": 0}
+        else:
+            return "waiting", {"time_left": 0}
+
+    if r["phase"] == "betting":
+        elapsed = now - r["phase_start"]
+        remain = PVP_BET_SEC - elapsed
+        if remain > 0:
+            return "betting", {"time_left": round(remain, 1)}
+        r["phase"] = "rolling"
+        r["phase_start"] = now
+        _pvp_resolve_locked(r)
+
+    if r["phase"] == "rolling":
+        elapsed = now - r["phase_start"]
+        remain = PVP_ROLL_SEC - elapsed
+        if remain > 0:
+            return "rolling", {"time_left": round(remain, 1), "roll_frac": r["roll_frac"]}
+        r["phase"] = "finished"
+        r["phase_start"] = now
+
+    if r["phase"] == "finished":
+        elapsed = now - r["phase_start"]
+        remain = PVP_SHOW_SEC - elapsed
+        if remain > 0:
+            return "finished", {
+                "time_left": round(remain, 1), "roll_frac": r["roll_frac"],
+                "winner_name": r["winner_name"], "winner_pct": r["winner_pct"],
+                "payout": r["payout"], "seed": r["seed"],
+            }
+        new_id = r["id"] + 1
+        _pvp_round.clear()
+        _pvp_round.update(_pvp_fresh_round(new_id))
+        return "waiting", {"time_left": 0}
+
+    return r["phase"], {"time_left": 0}
+
+
+def _pvp_uid_active(uid):
+    """True, якщо гравець уже бере участь у поточному нерозв'язаному раунді
+    PVP — для взаємовиключення з Мінами/Крашем (не можна тримати дві
+    незакриті ставки одночасно)."""
+    if uid not in _pvp_round["bets"]:
+        return False
+    phase, _ = _pvp_state_locked()
+    return phase in ("waiting", "betting", "rolling")
+
+
+def _pvp_player_row(uid, bet, color, viewer_uid, total):
+    return {
+        "name": bet["name"], "bet": bet["bet"], "color": color,
+        "pct": round(bet["bet"] / total * 100, 2) if total else 0,
+        "you": uid == viewer_uid,
+    }
+
+
+@app.route("/api/pvp/bet", methods=["POST"])
+def api_pvp_bet():
+    """Джекпот-раунд на кількох гравців: кожен вносить суму в спільний банк,
+    і один переможець (обраний чесно й пропорційно своїй частці банку)
+    забирає банк мінус невеликий будинковий збір. Ставки приймаються у
+    фазах 'waiting' (чекаємо другого гравця) і 'betting' (іде відлік)."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, username = auth
+    amount = _parse_amount(request.get_json(silent=True) or {})
+    if amount is None:
+        return {"error": "bad_amount"}, 400
+
+    with WEB_GAME_LOCK:
+        _clear_stale_games(uid)
+        if uid in web_mines_games or _crash_uid_active(uid):
+            return {"error": "active_game"}, 409
+        phase, _ = _pvp_state_locked()
+        r = _pvp_round
+        if phase not in ("waiting", "betting"):
+            return {"error": "round_in_progress"}, 409
+        if uid in r["bets"]:
+            return {"error": "already_bet"}, 409
+
+        if not call_async(spend(uid, amount)):
+            return {"error": "insufficient_funds"}, 400
+
+        nickname = call_async(get_nickname(uid))
+        name = (nickname or "").strip() or (("@" + username) if username else f"Гравець {uid}")
+        if not r["bets"]:
+            r["first_bet_at"] = time.time()
+        r["bets"][uid] = {"name": name, "bet": amount}
+        r["order"].append(uid)
+        call_async(track_active_game(uid, "pvp_webapp", uid, amount))
+
+    balance = call_async(get_user(uid))[2]
+    return {"balance": balance}
+
+
+@app.route("/api/pvp/status", methods=["POST"])
+def api_pvp_status():
+    """Опитується часто, без активної ставки теж — щоб було видно сам
+    банк і чужі ставки навіть до того, як приєднався сам гравець. Нічого
+    не списує й не видаляє — лише читає поточний стан спільного раунду."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, _ = auth
+
+    with WEB_GAME_LOCK:
+        phase, info = _pvp_state_locked()
+        r = _pvp_round
+        total = sum(b["bet"] for b in r["bets"].values())
+        players = [
+            _pvp_player_row(pid, r["bets"][pid], PVP_COLORS[i % len(PVP_COLORS)], uid, total)
+            for i, pid in enumerate(r["order"])
+        ]
+        payload = {
+            "phase": phase, "round_id": r["id"],
+            "players": players, "total": total,
+            "your_bet": r["bets"].get(uid, {}).get("bet"),
+            "seed_hash": r["seed_hash"],
+        }
+        payload.update(info)
+        if phase == "finished":
+            payload["you_won"] = (r["winner_uid"] == uid)
+
+    return payload
 
 
 # Настоящие красные числа европейской рулетки (чёрные — все остальные 1-36)
@@ -1840,8 +2054,9 @@ async def db(query, params=None, fetch=None):
     return await loop.run_in_executor(DB_EXECUTOR, _db_sync, query, params, fetch)
 
 
-# Создаем таблицы в синтаксисе PostgreSQL
-_db_sync("""
+def _run_startup_migrations():
+    """Створення/міграція схеми бази при старті. Створюємо таблиці в синтаксисі PostgreSQL."""
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     username TEXT,
@@ -1851,21 +2066,21 @@ CREATE TABLE IF NOT EXISTS users (
     referrals_count INTEGER DEFAULT 0
 )
 """)
-_db_sync("""
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS promo_codes (
     code TEXT PRIMARY KEY,
     reward INTEGER,
     uses_left INTEGER
 )
 """)
-_db_sync("""
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS promo_uses (
     user_id BIGINT,
     code TEXT,
     PRIMARY KEY (user_id, code)
 )
 """)
-_db_sync("""
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS active_games (
     user_id BIGINT PRIMARY KEY,
     game_type TEXT,
@@ -1874,20 +2089,20 @@ CREATE TABLE IF NOT EXISTS active_games (
     started_at BIGINT
 )
 """)
-_db_sync("""
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS user_items (
     user_id BIGINT,
     item_id TEXT,
     PRIMARY KEY (user_id, item_id)
 )
 """)
-# Косметика профілю (крамниця) — додаємо колонки на вже існуючу таблицю
-# users, якщо її ще не було (ALTER ... IF NOT EXISTS, щоб спокійно
-# перезапускатись на вже створеній базі).
-_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
-_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
-_db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
-_db_sync("""
+    # Косметика профілю (крамниця) — додаємо колонки на вже існуючу таблицю
+    # users, якщо її ще не було (ALTER ... IF NOT EXISTS, щоб спокійно
+    # перезапускатись на вже створеній базі).
+    _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
+    _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
+    _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
+    _db_sync("""
 CREATE TABLE IF NOT EXISTS pending_deposits (
     id SERIAL PRIMARY KEY,
     user_id BIGINT,
@@ -1897,9 +2112,43 @@ CREATE TABLE IF NOT EXISTS pending_deposits (
     created_at BIGINT
 )
 """)
-# Фото чека (file_id у Telegram) — щоб адмін міг глянути квитанцію прямо на
-# сайті, а не лише в чаті бота.
-_db_sync("ALTER TABLE pending_deposits ADD COLUMN IF NOT EXISTS photo_id TEXT DEFAULT ''")
+    # Фото чека (file_id у Telegram) — щоб адмін міг глянути квитанцію прямо на
+    # сайті, а не лише в чаті бота.
+    _db_sync("ALTER TABLE pending_deposits ADD COLUMN IF NOT EXISTS photo_id TEXT DEFAULT ''")
+
+
+# Виконуємо міграції з повторними спробами: безкоштовний план Supabase/Neon
+# "засинає" після паузи, і перше з'єднання одразу після старту процесу може
+# впасти з таймаутом, поки база ще прокидається, хоча за кілька секунд вона
+# вже відповідає. Один жорсткий _db_sync() без повторів раніше валив увесь
+# процес (навіть вже запущений у фоні веб-сервер, бо він у daemon-потоці)
+# на першій же такій тимчасовій затримці. Якщо ж причина не тимчасова
+# (DATABASE_URL вказує на видалений/невірний проєкт — саме так виглядає
+# помилка "tenant/user ... not found" від пулера Supabase), повтори це не
+# вилікують, і після вичерпання спроб процес так само завершиться, але з
+# чітким логом, що саме перевірити, замість голого трейсбеку після 1 спроби.
+_STARTUP_DB_RETRIES = 6
+_STARTUP_DB_RETRY_DELAY = 5
+for _startup_attempt in range(1, _STARTUP_DB_RETRIES + 1):
+    try:
+        _run_startup_migrations()
+        break
+    except Exception as _startup_exc:
+        if _startup_attempt == _STARTUP_DB_RETRIES:
+            logger.error(
+                "Не вдалося підключитись до бази після %d спроб (%s). Перевір змінну "
+                "середовища DATABASE_URL на Render — вона має збігатися з АКТУАЛЬНИМ "
+                "connection string із дашборду бази (Supabase: Project Settings -> "
+                "Database -> Connection pooling; Neon: Dashboard -> Connect), і що сам "
+                "проєкт бази не призупинено/видалено.",
+                _STARTUP_DB_RETRIES, _startup_exc,
+            )
+            raise
+        logger.warning(
+            "БД недоступна при старті (спроба %d/%d): %s — повтор через %dс",
+            _startup_attempt, _STARTUP_DB_RETRIES, _startup_exc, _STARTUP_DB_RETRY_DELAY,
+        )
+        time.sleep(_STARTUP_DB_RETRY_DELAY)
 
 
 async def add_pending_deposit(uid, username, coins, photo_id=""):
