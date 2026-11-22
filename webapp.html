@@ -223,8 +223,6 @@
   @keyframes pvpDot{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
   body.anim-off .pvp-hubdots span{animation:none;opacity:.7}
   body.anim-off .pvp-spinner{transition:none}
-  .pvp-fair{margin-top:12px;text-align:center;font-size:.68rem;color:var(--dim);background:var(--panel);
-    border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:8px;word-break:break-all}
 
   .pvp-players{margin-top:14px;background:var(--panel);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:12px 14px}
   .pvp-playershead{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
@@ -801,7 +799,6 @@
         </div>
         <div class="msg" id="pvpMsg" data-i18n="pvp_msg_waiting">Чекаємо ще гравців</div>
         <div class="betbar" id="pvpBetbar"></div>
-        <div class="pvp-fair" id="pvpFair">🛡️ <span data-i18n="pvp_fair">Чесна гра</span> · <span data-i18n="pvp_roll">Раунд</span> #<span id="pvpRollId">1</span> · <span id="pvpFairHash"></span></div>
         <div class="pvp-players">
           <div class="pvp-playershead"><span data-i18n="pvp_players_title">Гравці раунду</span><span class="pvp-playerscount" id="pvpPlayersCount">0</span></div>
           <div class="pvp-playerslist" id="pvpPlayersList"></div>
@@ -1310,8 +1307,6 @@
     pvp_btn_next:{ua:'Далі',ru:'Далее',en:'Next'},
     pvp_err_active:{ua:'Спершу заверши іншу гру',ru:'Сначала заверши другую игру',en:'Finish your other game first'},
     pvp_err_round:{ua:'Раунд уже триває — зачекай на новий',ru:'Раунд уже идёт — дождись нового',en:'Round already in progress — wait for a new one'},
-    pvp_fair:{ua:'Чесна гра',ru:'Честная игра',en:'Provably fair'},
-    pvp_roll:{ua:'Раунд',ru:'Раунд',en:'Roll'},
     crash_players_title:{ua:'Гравці раунду',ru:'Игроки раунда',en:'Players this round'},
     crash_no_players:{ua:'Поки ніхто не поставив',ru:'Пока никто не поставил',en:'No bets yet'},
     crash_history_title:{ua:'Останні раунди',ru:'Последние раунды',en:'Recent rounds'},
@@ -2489,8 +2484,6 @@
     var hubNameEl = document.getElementById('pvpHubName');
     var hubPctEl = document.getElementById('pvpHubPct');
     var hubDotsEl = document.getElementById('pvpHubDots');
-    var fairHashEl = document.getElementById('pvpFairHash');
-    var rollIdEl = document.getElementById('pvpRollId');
     var playersListEl = document.getElementById('pvpPlayersList');
     var playersCountEl = document.getElementById('pvpPlayersCount');
     var bar = makeBetBar(document.getElementById('pvpBetbar'), 100, placeBet, t('pvp_btn_bet'));
@@ -2590,10 +2583,6 @@
 
       totalEl.textContent = r.total || 0;
       countEl.textContent = players.length;
-      rollIdEl.textContent = r.round_id;
-      fairHashEl.textContent = r.seed
-        ? (r.seed_hash || '').slice(0, 8) + '…→' + r.seed.slice(0, 8) + '…'
-        : (r.seed_hash || '').slice(0, 14) + '…';
 
       // Колесо не перебудовуємо посеред обертання (щоб не зірвати анімацію),
       // окрім випадку, коли воно досі порожнє — напр. якщо сторінку відкрили
@@ -2690,7 +2679,7 @@
     // applyStatus(), тож UI-логіка не дублюється. ----
     var DEMO_BOT_NAMES = ['Nova','Rex','Kira','Zed','Luna','Max','Aria','Finn'];
     var DEMO_COLORS = ['#2bffa3','#ffc342','#b47bff','#19e8ff','#ff2d78','#5b8def'];
-    var DEMO_BET_SEC = 20, DEMO_ROLL_SEC = 5, DEMO_SHOW_SEC = 6;
+    var DEMO_BET_SEC = 10, DEMO_ROLL_SEC = 5, DEMO_SHOW_SEC = 6;
     var demo = { phase:'waiting', phaseStart: Date.now(), roundId: 1, bets: [], firstBetAt: null, rollFrac: null, winnerIdx: null, payout: null, paid: false };
 
     function demoTotal(){ return demo.bets.reduce(function(s,b){ return s + b.bet; }, 0); }
