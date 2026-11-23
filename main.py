@@ -1,4 +1,5 @@
 import asyncio
+import colorsys
 import hashlib
 import hmac
 import json
@@ -616,6 +617,7 @@ def api_me():
     next_bonus_at = last_bonus + 86400
     border, theme = call_async(get_equipped(uid))
     nickname = call_async(get_nickname(uid))
+    avatar_color = call_async(get_avatar_color(uid))
     # Прибираємо застарілі web_mines_games тут теж — фронтенд опитує /api/me
     # при кожному переході між сторінками, тож "залипла" гра зникає сама
     # набагато раніше, ніж гравець встигне тицьнути нову ставку. Crash сюди
@@ -633,6 +635,8 @@ def api_me():
         "next_bonus_at": next_bonus_at,
         "equipped_border": border,
         "equipped_theme": theme,
+        "avatar_color": avatar_color,
+        "avatar_color_palette": AVATAR_COLOR_PALETTE,
     }
 
 
@@ -652,6 +656,22 @@ def api_profile_nickname():
         return {"error": "bad_chars"}, 400
     call_async(set_nickname(uid, nickname))
     return {"ok": True, "nickname": nickname}
+
+
+@app.route("/api/profile/avatar_color", methods=["POST"])
+def api_profile_avatar_color():
+    """Безкоштовний вибір кольору власної аватарки (використовується в PVP) —
+    окремо від платних рамок/тем крамниці. Обмежено фіксованою палітрою,
+    щоб не можна було обрати непомітний/зламаний колір."""
+    auth = authed_user()
+    if not auth:
+        return {"error": "unauthorized"}, 401
+    uid, _ = auth
+    color = str((request.get_json(silent=True) or {}).get("color", "")).strip().lower()
+    if color not in AVATAR_COLOR_PALETTE:
+        return {"error": "bad_color"}, 400
+    call_async(set_avatar_color(uid, color))
+    return {"ok": True, "color": color}
 
 
 @app.route("/api/bonus/claim", methods=["POST"])
@@ -1416,13 +1436,18 @@ def api_crash_cashout():
 # його частці банку (хто вніс більше — має більший шанс, але не гарантію).
 # Будинок лишає собі невеликий відсоток (той самий дух хаус-еджу, що й в
 # Апгрейді), решту банку забирає один переможець.
-PVP_BET_SEC = 10       # скільки триває прийом ставок після того, як зібрався 2-й гравець
+PVP_BET_SEC = 10        # скільки триває прийом ставок від моменту ПЕРШОЇ ставки в раунді
 PVP_ROLL_SEC = 5        # тривалість анімації розкрутки колеса на клієнті (переможець уже відомий серверу)
 PVP_SHOW_SEC = 6        # скільки показуємо переможця, перш ніж відкрити новий раунд
-PVP_MIN_PLAYERS = 2
-PVP_WAIT_TIMEOUT = 90   # якщо другий гравець так і не прийшов — повертаємо ставку першому
 PVP_RAKE = 0.05
 PVP_COLORS = ["#2bffa3", "#ffc342", "#b47bff", "#19e8ff", "#ff2d78", "#5b8def"]
+# Той самий набір — ще й палітра, з якої гравець обирає колір своєї аватарки
+# в налаштуваннях профілю (безкоштовно). Якщо гравець нічого не обрав,
+# PVP сам призначає колір за порядком приєднання до раунду (як і раніше).
+AVATAR_COLOR_PALETTE = [
+    "#ff2d78", "#19e8ff", "#ffc342", "#2bffa3", "#b47bff", "#5b8def",
+    "#ff6a6a", "#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc",
+]
 
 
 def _pvp_new_seed():
@@ -1439,9 +1464,8 @@ def _pvp_fresh_round(round_id):
     seed, seed_hash = _pvp_new_seed()
     return {
         "id": round_id, "phase": "waiting", "phase_start": time.time(),
-        "first_bet_at": None,
-        "bets": {},     # uid -> {"name","bet"}
-        "order": [],    # порядок приєднання — звідси й колір сегмента на колесі
+        "bets": {},     # uid -> {"name","bet","color_base"}
+        "order": [],    # порядок приєднання — звідси й дефолтний колір сегмента
         "seed": seed, "seed_hash": seed_hash,
         "winner_uid": None, "winner_name": None, "winner_pct": None,
         "payout": None, "roll_frac": None,
@@ -1479,19 +1503,25 @@ def _pvp_resolve_locked(r):
 def _pvp_state_locked():
     """Та сама лінива фазова машина, що й у Краша (рахує фазу спільного
     раунду за часовими мітками щоразу, коли її питають — без фонового
-    таск-лупу). На відміну від Краша, тут потрібні щонайменше 2 гравці: поки
-    їх менше — раунд стоїть у 'waiting' без дедлайну, і лише з другим
-    гравцем стартує відлік ставок."""
+    таск-лупу). На відміну від Краша, відлік ставок стартує не за
+    розкладом, а в момент ПЕРШОЇ ставки (див. api_pvp_bet) — доти раунд
+    стоїть у 'waiting' без дедлайну й лише пульсує в інтерфейсі. Після 10с
+    з моменту першої ставки: якщо так ніхто й не приєднався — повертаємо
+    ставку без розіграшу; якщо приєднався хоч один суперник — крутимо колесо."""
     now = time.time()
     r = _pvp_round
 
     if r["phase"] == "waiting":
-        if len(r["bets"]) >= PVP_MIN_PLAYERS:
-            r["phase"] = "betting"
-            r["phase_start"] = now
-        elif r["first_bet_at"] and now - r["first_bet_at"] > PVP_WAIT_TIMEOUT:
-            # Один гравець чекав надто довго й так і не дочекався другого —
-            # повертаємо йому ставку, щоб гроші не висіли в підвішеному стані.
+        return "waiting", {"time_left": 0}
+
+    if r["phase"] == "betting":
+        elapsed = now - r["phase_start"]
+        remain = PVP_BET_SEC - elapsed
+        if remain > 0:
+            return "betting", {"time_left": round(remain, 1)}
+        if len(r["bets"]) < 2:
+            # Лишився один гравець — суперник так і не прийшов за 10с:
+            # мовчки повертаємо ставку, без анімації й без екрана "переможець".
             next_id = r["id"] + 1
             for uid, b in r["bets"].items():
                 call_async(add_balance(uid, b["bet"]))
@@ -1499,14 +1529,6 @@ def _pvp_state_locked():
             _pvp_round.clear()
             _pvp_round.update(_pvp_fresh_round(next_id))
             return "waiting", {"time_left": 0}
-        else:
-            return "waiting", {"time_left": 0}
-
-    if r["phase"] == "betting":
-        elapsed = now - r["phase_start"]
-        remain = PVP_BET_SEC - elapsed
-        if remain > 0:
-            return "betting", {"time_left": round(remain, 1)}
         r["phase"] = "rolling"
         r["phase_start"] = now
         _pvp_resolve_locked(r)
@@ -1543,23 +1565,37 @@ def _pvp_uid_active(uid):
     if uid not in _pvp_round["bets"]:
         return False
     phase, _ = _pvp_state_locked()
-    return phase in ("waiting", "betting", "rolling")
+    return phase in ("betting", "rolling")
 
 
-def _pvp_player_row(uid, bet, color, viewer_uid, total):
-    return {
-        "name": bet["name"], "bet": bet["bet"], "color": color,
-        "pct": round(bet["bet"] / total * 100, 2) if total else 0,
-        "you": uid == viewer_uid,
-    }
+def _pvp_resolve_color(hex_color, used_hues):
+    """Гравець обирає колір своєї аватарки один раз у профілі (назавжди),
+    але якщо в ОДНОМУ раунді випадково зійшлися двоє з однаковим/надто
+    близьким кольором — segment-и колеса стали б невиразні. Тому тут не
+    міняємо збережений вибір назавжди, а лише для ЦЬОГО відображення злегка
+    зсуваємо відтінок (зберігаючи насиченість і яскравість — колір лишається
+    'схожим', не довільним), поки він не відрізнятиметься від уже зайнятих."""
+    r = int(hex_color[1:3], 16) / 255.0
+    g = int(hex_color[3:5], 16) / 255.0
+    b = int(hex_color[5:7], 16) / 255.0
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    hue = h * 360
+    tries = 0
+    while any(min(abs(hue - uh), 360 - abs(hue - uh)) < 20 for uh in used_hues) and tries < 10:
+        hue = (hue + 35) % 360
+        tries += 1
+    used_hues.append(hue)
+    nr, ng, nb = colorsys.hls_to_rgb(hue / 360, l, s)
+    return "#%02x%02x%02x" % (round(nr * 255), round(ng * 255), round(nb * 255))
 
 
 @app.route("/api/pvp/bet", methods=["POST"])
 def api_pvp_bet():
     """Джекпот-раунд на кількох гравців: кожен вносить суму в спільний банк,
     і один переможець (обраний чесно й пропорційно своїй частці банку)
-    забирає банк мінус невеликий будинковий збір. Ставки приймаються у
-    фазах 'waiting' (чекаємо другого гравця) і 'betting' (іде відлік)."""
+    забирає банк мінус невеликий будинковий збір. Перша ставка в порожньому
+    раунді одразу стартує 10-секундний відлік (фаза 'betting') — без
+    очікування конкретної кількості гравців."""
     auth = authed_user()
     if not auth:
         return {"error": "unauthorized"}, 401
@@ -1584,9 +1620,11 @@ def api_pvp_bet():
 
         nickname = call_async(get_nickname(uid))
         name = (nickname or "").strip() or (("@" + username) if username else f"Гравець {uid}")
+        color_base = call_async(get_avatar_color(uid)) or PVP_COLORS[len(r["order"]) % len(PVP_COLORS)]
         if not r["bets"]:
-            r["first_bet_at"] = time.time()
-        r["bets"][uid] = {"name": name, "bet": amount}
+            r["phase"] = "betting"
+            r["phase_start"] = time.time()
+        r["bets"][uid] = {"name": name, "bet": amount, "color_base": color_base}
         r["order"].append(uid)
         call_async(track_active_game(uid, "pvp_webapp", uid, amount))
 
@@ -1608,9 +1646,16 @@ def api_pvp_status():
         phase, info = _pvp_state_locked()
         r = _pvp_round
         total = sum(b["bet"] for b in r["bets"].values())
+        used_hues = []
         players = [
-            _pvp_player_row(pid, r["bets"][pid], PVP_COLORS[i % len(PVP_COLORS)], uid, total)
-            for i, pid in enumerate(r["order"])
+            {
+                "name": r["bets"][pid]["name"],
+                "bet": r["bets"][pid]["bet"],
+                "color": _pvp_resolve_color(r["bets"][pid]["color_base"], used_hues),
+                "pct": round(r["bets"][pid]["bet"] / total * 100, 2) if total else 0,
+                "you": pid == uid,
+            }
+            for pid in r["order"]
         ]
         payload = {
             "phase": phase, "round_id": r["id"],
@@ -2102,6 +2147,9 @@ CREATE TABLE IF NOT EXISTS user_items (
     _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_border TEXT DEFAULT ''")
     _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_theme TEXT DEFAULT ''")
     _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
+    # Колір аватарки в PVP — обирається безкоштовно в профілі, окремо від
+    # платних рамок/тем крамниці.
+    _db_sync("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_color TEXT DEFAULT ''")
     _db_sync("""
 CREATE TABLE IF NOT EXISTS pending_deposits (
     id SERIAL PRIMARY KEY,
@@ -2413,6 +2461,15 @@ async def get_nickname(uid):
 
 async def set_nickname(uid, nickname):
     await db("UPDATE users SET nickname=? WHERE user_id=?", (nickname, uid))
+
+
+async def get_avatar_color(uid):
+    row = await db("SELECT avatar_color FROM users WHERE user_id=?", (uid,), "one")
+    return (row[0] or "") if row else ""
+
+
+async def set_avatar_color(uid, color):
+    await db("UPDATE users SET avatar_color=? WHERE user_id=?", (color, uid))
 
 
 async def top10():

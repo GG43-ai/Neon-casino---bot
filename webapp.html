@@ -476,6 +476,10 @@
   .shoptabs button{flex:1;padding:9px;border-radius:9px;font-size:.76rem;font-weight:700;color:var(--dim)}
   .shoptabs button.active{background:var(--bg2);color:var(--text)}
   .shopgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .colorgrid{display:flex;flex-wrap:wrap;gap:12px}
+  .colorsw{width:34px;height:34px;border-radius:50%;border:2px solid transparent;box-shadow:0 0 0 1px rgba(255,255,255,.12);transition:transform .15s,box-shadow .15s}
+  .colorsw.sel{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.3),0 0 10px rgba(255,255,255,.35);transform:scale(1.14)}
+  .colorsw:active{transform:scale(.88)}
   .shopitem{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
   .shopitem .swatch{width:46px;height:46px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.2rem}
   .shopitem .sname{font-size:.68rem;color:var(--dim);min-height:2.1em}
@@ -797,7 +801,7 @@
             <div class="pvp-hubdots" id="pvpHubDots"><span></span><span></span><span></span></div>
           </div>
         </div>
-        <div class="msg" id="pvpMsg" data-i18n="pvp_msg_waiting">Чекаємо ще гравців</div>
+        <div class="msg" id="pvpMsg" data-i18n="pvp_msg_waiting">Став перший — почнеться відлік</div>
         <div class="betbar" id="pvpBetbar"></div>
         <div class="pvp-players">
           <div class="pvp-playershead"><span data-i18n="pvp_players_title">Гравці раунду</span><span class="pvp-playerscount" id="pvpPlayersCount">0</span></div>
@@ -994,6 +998,8 @@
             </div>
             <p style="color:var(--dim);font-size:.72rem;margin-bottom:10px">Тема — безкоштовно, застосовується одразу</p>
             <div class="shopgrid" id="themeGrid"></div>
+            <p style="color:var(--dim);font-size:.72rem;margin:16px 0 10px">Колір аватарки в PVP — безкоштовно</p>
+            <div class="colorgrid" id="avatarColorGrid"></div>
           </div>
         </details>
 
@@ -1294,8 +1300,8 @@
     pvp_players_word:{ua:'гравців',ru:'игроков',en:'players'},
     pvp_players_title:{ua:'Гравці раунду',ru:'Игроки раунда',en:'Round players'},
     pvp_no_players:{ua:'Поки нікого немає',ru:'Пока никого нет',en:'No one yet'},
-    pvp_msg_waiting:{ua:'Чекаємо ще гравців',ru:'Ждём ещё игроков',en:'Waiting for players'},
-    pvp_msg_waiting_bet:{ua:'Ставку зроблено — чекаємо суперників',ru:'Ставка сделана — ждём соперников',en:'Bet placed — waiting for opponents'},
+    pvp_msg_waiting:{ua:'Став перший — почнеться відлік',ru:'Поставь первым — начнётся отсчёт',en:'Place the first bet to start the countdown'},
+    pvp_hub_starts:{ua:'СТАРТ ЗА',ru:'СТАРТ ЧЕРЕЗ',en:'STARTS IN'},
     pvp_msg_betting:{ua:'Прийом ставок іде — встигай!',ru:'Приём ставок идёт — успевай!',en:'Betting is open — hurry!'},
     pvp_msg_betting_bet:{ua:'Твоя ставка в банку. Хто ще приєднається?',ru:'Твоя ставка в банке. Кто ещё присоединится?',en:'Your bet is in. Who else will join?'},
     pvp_msg_rolling:{ua:'Крутимо колесо…',ru:'Крутим колесо…',en:'Spinning the wheel…'},
@@ -1505,11 +1511,34 @@
       if (r.min_bet) MIN_BET=r.min_bet;
       updateBonusUI();
       updateProfileHead();
+      renderAvatarColorGrid();
     }
     catch(e){}
   }
   refreshBalance();
   checkAdmin();
+
+  // Безкоштовний вибір кольору власної аватарки (використовується в
+  // сегментах/аватарках колеса PVP) — окремо від платних рамок/тем крамниці.
+  function renderAvatarColorGrid(){
+    var grid = document.getElementById('avatarColorGrid');
+    if (!grid || !meData) return;
+    var palette = meData.avatar_color_palette || [];
+    var current = meData.avatar_color || '';
+    grid.innerHTML = palette.map(function(c){
+      return '<button class="colorsw'+(c===current?' sel':'')+'" data-color="'+c+'" style="background:'+c+'"></button>';
+    }).join('');
+    grid.querySelectorAll('button[data-color]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        try {
+          var r = await api('/api/profile/avatar_color', {color: btn.dataset.color});
+          if (meData) meData.avatar_color = r.color;
+          renderAvatarColorGrid();
+          haptic('ok');
+        } catch(e){ haptic('fail'); }
+      });
+    });
+  }
 
   function updateProfileHead(){
     var nameEl = document.getElementById('profName');
@@ -2589,14 +2618,22 @@
       // саме в момент фази rolling.
       if (phase !== 'rolling' || !segEl.children.length) buildWheel(players);
 
-      if (phase === 'waiting' || phase === 'betting'){
+      if (phase === 'waiting'){
+        // Нікого ще немає — просто пульсуємо й чекаємо першу ставку,
+        // жодного дедлайну: 10-секундний відлік стартує лише з нею.
         hubDotsEl.style.display = '';
         hubNameEl.textContent = '';
         hubPctEl.textContent = '';
+        msgEl.textContent = t('pvp_msg_waiting');
+        bar.setPlaying(false, t('pvp_btn_bet'));
+      } else if (phase === 'betting'){
+        // Перша ставка вже є — йде фіксований 10-секундний відлік; хто ще
+        // встигне приєднатись за цей час, той і бере участь у розіграші.
+        hubDotsEl.style.display = 'none';
+        hubNameEl.textContent = t('pvp_hub_starts');
+        hubPctEl.textContent = Math.max(0, Math.ceil(r.time_left || 0)) + 'с';
         var haveBet = myBet != null;
-        msgEl.textContent = t(phase === 'waiting'
-          ? (haveBet ? 'pvp_msg_waiting_bet' : 'pvp_msg_waiting')
-          : (haveBet ? 'pvp_msg_betting_bet' : 'pvp_msg_betting'));
+        msgEl.textContent = t(haveBet ? 'pvp_msg_betting_bet' : 'pvp_msg_betting');
         bar.setPlaying(haveBet, haveBet ? t('pvp_btn_waiting') : t('pvp_btn_bet'));
       } else if (phase === 'rolling'){
         hubDotsEl.style.display = 'none';
@@ -2680,7 +2717,7 @@
     var DEMO_BOT_NAMES = ['Nova','Rex','Kira','Zed','Luna','Max','Aria','Finn'];
     var DEMO_COLORS = ['#2bffa3','#ffc342','#b47bff','#19e8ff','#ff2d78','#5b8def'];
     var DEMO_BET_SEC = 10, DEMO_ROLL_SEC = 5, DEMO_SHOW_SEC = 6;
-    var demo = { phase:'waiting', phaseStart: Date.now(), roundId: 1, bets: [], firstBetAt: null, rollFrac: null, winnerIdx: null, payout: null, paid: false };
+    var demo = { phase:'waiting', phaseStart: Date.now(), roundId: 1, bets: [], rollFrac: null, winnerIdx: null, payout: null, paid: false };
 
     function demoTotal(){ return demo.bets.reduce(function(s,b){ return s + b.bet; }, 0); }
     function demoYourBet(){ var mine = demo.bets.filter(function(b){ return b.you; })[0]; return mine ? mine.bet : null; }
@@ -2688,12 +2725,12 @@
       var name = DEMO_BOT_NAMES[Math.floor(Math.random() * DEMO_BOT_NAMES.length)] + (Math.floor(Math.random() * 90) + 10);
       var bet = [50,100,150,200,300][Math.floor(Math.random() * 5)];
       demo.bets.push({name: name, bet: bet, you: false});
-      if (demo.bets.length === 1) demo.firstBetAt = Date.now();
     }
     function demoBet(amount){
+      // Як і на сервері: перша ставка (чия б не була) одразу стартує
+      // фіксований 10-секундний відлік — без очікування другого гравця.
+      if (!demo.bets.length){ demo.phase = 'betting'; demo.phaseStart = Date.now(); }
       demo.bets.push({name: t('crash_you'), bet: amount, you: true});
-      if (demo.bets.length === 1) demo.firstBetAt = Date.now();
-      if (demo.bets.length < 2) demoAddBot();
     }
     function demoPlayers(){
       var total = demoTotal() || 1;
@@ -2723,19 +2760,25 @@
       var elapsed = (now - demo.phaseStart) / 1000;
 
       if (demo.phase === 'waiting'){
-        if (demo.bets.length >= 2){
-          demo.phase = 'betting'; demo.phaseStart = now; elapsed = 0;
-        } else {
-          if (demo.firstBetAt && now - demo.firstBetAt > 3000 && demo.bets.length < 2) demoAddBot();
-          applyStatus(demoStatus({phase: 'waiting', time_left: 0}));
-          return;
-        }
+        // Нікого ще немає — чекаємо, поки сам гравець поставить (demoBet
+        // одразу переведе фазу в 'betting'), жодного автотаймера тут немає.
+        applyStatus(demoStatus({phase: 'waiting', time_left: 0}));
+        return;
       }
       if (demo.phase === 'betting'){
         var remain = DEMO_BET_SEC - elapsed;
         if (remain > 0){
-          if (Math.random() < 0.01 && demo.bets.length < 5) demoAddBot();
+          if (Math.random() < 0.15 && demo.bets.length < 5) demoAddBot();
           applyStatus(demoStatus({phase: 'betting', time_left: remain}));
+          return;
+        }
+        if (demo.bets.length < 2){
+          // Так ніхто й не приєднався за 10с — мовчки повертаємо ставку,
+          // без анімації й без екрана "переможець" (так само, як на сервері).
+          var mine = demo.bets.filter(function(b){ return b.you; })[0];
+          if (mine) setBalance(balance + mine.bet);
+          demo.phase = 'waiting'; demo.phaseStart = now; demo.roundId++; demo.bets = [];
+          applyStatus(demoStatus({phase: 'waiting', time_left: 0}));
           return;
         }
         demo.phase = 'rolling'; demo.phaseStart = now; elapsed = 0;
@@ -2766,7 +2809,7 @@
           }));
           return;
         }
-        demo.phase = 'waiting'; demo.phaseStart = now; demo.roundId++; demo.bets = []; demo.firstBetAt = null;
+        demo.phase = 'waiting'; demo.phaseStart = now; demo.roundId++; demo.bets = [];
         applyStatus(demoStatus({phase: 'waiting', time_left: 0}));
       }
     }
