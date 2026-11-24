@@ -209,7 +209,8 @@
   .pvp-avatars{position:absolute;inset:0;pointer-events:none}
   .pvp-wheelav{position:absolute;width:30px;height:30px;border-radius:50%;transform:translate(-50%,-50%);
     display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-weight:700;
-    font-size:.72rem;color:#fff;border:2px solid rgba(10,7,20,.85);box-shadow:0 0 0 2px rgba(255,255,255,.12)}
+    font-size:.72rem;color:#fff;border:2px solid rgba(10,7,20,.85);box-shadow:0 0 0 2px rgba(255,255,255,.12);overflow:hidden}
+  .pvp-wheelav img{width:100%;height:100%;object-fit:cover}
   .pvp-hub{position:absolute;inset:38px;border-radius:50%;background:radial-gradient(circle,var(--panel),var(--bg2));
     border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:4px;z-index:3;text-align:center;padding:0 10px}
@@ -229,7 +230,8 @@
   .pvp-playerscount{background:var(--bg2);border-radius:8px;padding:2px 8px;font-family:'Unbounded',sans-serif;font-weight:700;color:var(--text)}
   .pvp-playerslist{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
   .pvp-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:11px;background:var(--bg2);border-left:3px solid var(--violet);transition:box-shadow .2s}
-  .pvp-row .pvp-avatar{width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff}
+  .pvp-row .pvp-avatar{position:relative;overflow:hidden;width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff}
+  .pvp-row .pvp-avatar img{width:100%;height:100%;object-fit:cover}
   .pvp-row .pvp-info{flex:1;min-width:0}
   .pvp-row .pvp-name{font-size:.76rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pvp-row .pvp-bet{font-size:.68rem;color:var(--dim);font-family:'Unbounded',sans-serif}
@@ -2541,6 +2543,11 @@
     function buildWheel(players){
       var r = 92, C = 2 * Math.PI * r;
       if (!players.length){ segEl.innerHTML = ''; avatarsEl.innerHTML = ''; return; }
+      // Своя ж ава береться напряму з Telegram WebApp (без запиту на сервер),
+      // чужі — через проксі-ендпоінт /api/avatar/<id> (той самий, що й у
+      // топі гравців); якщо фото нема або не завантажилось — під ним завжди
+      // лежить ініціал, onerror просто ховає <img>.
+      var myPhoto = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
       var cum = 0, segHtml = '', avHtml = '';
       players.forEach(function(p){
         var frac = Math.max(0, p.pct) / 100;
@@ -2553,8 +2560,12 @@
         var ax = 110 + r * Math.cos(ang), ay = 110 + r * Math.sin(ang);
         var label = p.you ? t('crash_you') : p.name;
         var initial = esc((label || '?').trim().charAt(0).toUpperCase());
+        // Демо-боти не мають user_id (і взагалі не існують на сервері) —
+        // для них фото не запитуємо, лишається тільки ініціал.
+        var photoSrc = p.you ? myPhoto : (p.user_id ? (API_BASE + '/api/avatar/' + p.user_id) : null);
         avHtml += '<div class="pvp-wheelav" style="left:' + (ax / 220 * 100).toFixed(2) + '%;top:' +
-          (ay / 220 * 100).toFixed(2) + '%;background:' + p.color + '">' + initial + '</div>';
+          (ay / 220 * 100).toFixed(2) + '%;background:' + p.color + '"><span>' + initial + '</span>' +
+          (photoSrc ? '<img src="' + photoSrc + '" alt="" onerror="this.style.display=\'none\'">' : '') + '</div>';
         cum += frac;
       });
       segEl.innerHTML = segHtml;
@@ -2592,12 +2603,15 @@
         playersListEl.innerHTML = '<div class="pvp-playersempty">' + t('pvp_no_players') + '</div>';
         return;
       }
+      var myPhoto = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
       playersListEl.innerHTML = list.map(function(p){
         var cls = 'pvp-row' + (p.you ? ' you' : '') + (winnerName && p.name === winnerName ? ' winner' : '');
         var name = p.you ? t('crash_you') : p.name;
         var initial = esc((name || '?').trim().charAt(0).toUpperCase());
+        var photoSrc = p.you ? myPhoto : (p.user_id ? (API_BASE + '/api/avatar/' + p.user_id) : null);
         return '<div class="' + cls + '" style="border-left-color:' + p.color + '">' +
-          '<div class="pvp-avatar" style="background:' + p.color + '">' + initial + '</div>' +
+          '<div class="pvp-avatar" style="background:' + p.color + '"><span>' + initial + '</span>' +
+          (photoSrc ? '<img src="' + photoSrc + '" alt="" onerror="this.style.display=\'none\'">' : '') + '</div>' +
           '<div class="pvp-info"><div class="pvp-name">' + esc(name) + '</div><div class="pvp-bet">' + p.bet + ' 💰</div></div>' +
           '<div class="pvp-pct" style="color:' + p.color + '">' + p.pct + '%</div>' +
         '</div>';

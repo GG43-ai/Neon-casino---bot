@@ -1649,6 +1649,7 @@ def api_pvp_status():
         used_hues = []
         players = [
             {
+                "user_id": pid,
                 "name": r["bets"][pid]["name"],
                 "bet": r["bets"][pid]["bet"],
                 "color": _pvp_resolve_color(r["bets"][pid]["color_base"], used_hues),
